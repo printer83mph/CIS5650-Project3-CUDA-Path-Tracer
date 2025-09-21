@@ -2,18 +2,17 @@
 
 #include <cstdio>
 #include <cuda.h>
-#include <cmath>
 #include <thrust/execution_policy.h>
 #include <thrust/random.h>
 #include <thrust/remove.h>
 
-#include "sceneStructs.h"
-#include "scene.h"
-#include "glm/glm.hpp"
-#include "glm/gtx/norm.hpp"
-#include "utilities.h"
-#include "intersections.h"
 #include "interactions.h"
+#include "intersections.h"
+#include "scene.h"
+#include "sceneStructs.h"
+#include "utilities.h"
+#include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
 
 #define ERRORCHECK 1
 
