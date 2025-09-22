@@ -9,9 +9,14 @@
       "name": "CUDA C++: Launch",
       "type": "cuda-gdb",
       "request": "launch",
-      "program": "${workspaceFolder}/build/bin/cis565_path_tracer",
+      "environment": [
+        {"name": "WAYLAND_DISPLAY", "value": ""},
+        {"name": "XDG_SESSION_TYPE", "value": "x11"}
+      ],
+      "program": "${workspaceFolder}/build/bin/Debug/cis565_path_tracer",
       "cwd": "${workspaceFolder}",
-      "args": ["scenes/cornell.json"]
+      "args": ["scenes/cornell.json"],
+      "preLaunchTask": "CMake: build"
     },
     {
       "name": "CUDA C++: Attach",
