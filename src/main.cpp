@@ -296,9 +296,32 @@ void RenderImGui()
     const char *renderModes[] = {"Default", "Ambient Occlusion", "Normal", "Depth"};
     const int numRenderModes = sizeof(renderModes) / sizeof(renderModes[0]);
 
-    if (ImGui::Combo("Render Mode", (int *)&options.renderMode, renderModes, numRenderModes))
-        camchanged = true;
-    if (ImGui::SliderFloat("Depth Pass Max", &options.depthPassMaxDistance, 0.f, 100.f))
+    bool update = false;
+    update |= ImGui::Combo("Render Mode", (int *)&options.renderMode, renderModes, numRenderModes);
+    if (options.renderMode != PathTrace::RenderMode::DEPTH)
+        ImGui::BeginDisabled();
+
+    // Options for depth pass
+    update |= ImGui::SliderFloat("Depth Pass Max", &options.depthPassMaxDistance, 0.f, 100.f);
+
+    if (options.renderMode != PathTrace::RenderMode::DEPTH)
+        ImGui::EndDisabled();
+
+    ImGui::Spacing();
+
+    ImGui::Text("Optimizations");
+    update |= ImGui::Checkbox("Materials Contiguous in Memory", &options.contiguousMaterials);
+    if (!options.contiguousMaterials)
+        ImGui::BeginDisabled();
+
+    update |= ImGui::Checkbox("Render Kernel Per Material", &options.renderKernelPerMaterial);
+    update |=
+        ImGui::SliderInt("Min Path Count for Sorting", &options.minPathCountForSorting, 0, 1024);
+
+    if (!options.contiguousMaterials)
+        ImGui::EndDisabled();
+
+    if (update)
         camchanged = true;
 
     ImGui::End();

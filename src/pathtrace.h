@@ -13,8 +13,14 @@ enum RenderMode {
 };
 
 struct Options {
+    // View
     RenderMode renderMode;
     float depthPassMaxDistance;
+
+    // Optimizations
+    bool contiguousMaterials;
+    bool renderKernelPerMaterial;
+    int minPathCountForSorting;
 };
 Options defaultOptions();
 

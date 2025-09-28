@@ -82,8 +82,8 @@ static Geom* dev_geoms = NULL;
 static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
-// TODO: static variables for device memory, any extra info you need, etc
-// ...
+static int *dev_intersectionMaterialStartIndices;
+// $DEV_MEMORY: static variables for device memory, any extra info you need, etc
 
 void InitDataContainer(GuiDataContainer* imGuiData)
 {
@@ -111,7 +111,9 @@ void pathtraceInit(Scene* scene)
     cudaMalloc(&dev_intersections, pixelcount * sizeof(ShadeableIntersection));
     cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
 
-    // TODO: initialize any extra device memeory you need
+    cudaMalloc(&dev_intersectionMaterialStartIndices, scene->materials.size() * sizeof(int));
+
+    // $DEV_MEMORY: initialize any extra device memeory you need
 
     checkCUDAError("pathtraceInit");
 }
@@ -123,7 +125,8 @@ void pathtraceFree()
     cudaFree(dev_geoms);
     cudaFree(dev_materials);
     cudaFree(dev_intersections);
-    // TODO: clean up any extra device memory you created
+    cudaFree(dev_intersectionMaterialStartIndices);
+    // $DEV_MEMORY: clean up any extra device memory you created
 
     checkCUDAError("pathtraceFree");
 }
@@ -164,10 +167,6 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
     }
 }
 
-// TODO:
-// computeIntersections handles generating ray intersections ONLY.
-// Generating new rays is handled in your shader(s).
-// Feel free to modify the code below.
 __global__ void computeIntersections(
     int depth,
     int num_paths,
@@ -404,22 +403,59 @@ __global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iteration
 }
 
 struct has_no_remaining_bounces {
-    __host__ __device__ bool operator()(const PathSegment segment) {
+    __host__ __device__ bool operator()(const PathSegment &segment) {
         return segment.remainingBounces <= 0;
     }
 };
 struct has_remaining_bounces {
-    __host__ __device__ bool operator()(const PathSegment segment) {
+    __host__ __device__ bool operator()(const PathSegment &segment) {
         return segment.remainingBounces > 0;
+    }
+};
+
+struct material_comparator {
+    __host__ __device__ bool operator()(const ShadeableIntersection &a,
+                                        const ShadeableIntersection &b) {
+        // Sort intersections with t < 0 to the start
+        if (a.t < 0 && b.t >= 0)
+            return true;
+        if (a.t >= 0 && b.t < 0)
+            return false;
+
+        // For intersections with the same t sign, sort by material ID
+        return a.materialId < b.materialId;
     }
 };
 
 PathTrace::Options PathTrace::defaultOptions() {
     PathTrace::Options opts;
+
     opts.renderMode = RenderMode::DEFAULT;
     opts.depthPassMaxDistance = 30.f;
 
+    opts.contiguousMaterials = false;
+    opts.renderKernelPerMaterial = false;
+    opts.minPathCountForSorting = 256;
+
     return opts;
+}
+
+/**
+ * Set each `odata[i]` to the start index of material `i` in `idata`.
+ *
+ * This method assumes we have all the t < 0 rays sorted into the beginning of `idata`.
+ */
+__global__ void getMaterialStartIndices(int n, int *odata, const ShadeableIntersection *idata) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx == 0 || idx > n)
+        return;
+
+    const ShadeableIntersection &isect = idata[idx];
+
+    int isNewMaterial = isect.t > 0 && isect.materialId != idata[idx - 1].materialId;
+    if (isNewMaterial) {
+        odata[isect.materialId] = idx;
+    }
 }
 
 /**
@@ -472,20 +508,69 @@ void pathtrace(uchar4 *pbo, int frame, int iter, const PathTrace::Options &optio
         cudaDeviceSynchronize();
         depth++;
 
-        // TODO:
-        // --- Shading Stage ---
-        // Shade path segments based on intersections and generate new rays by
-        // evaluating the BSDF.
-        // Start off with just a big kernel that handles all the different
-        // materials you have in the scenefile.
-        // TODO: compare between directly shading the path segments and shading
-        // path segments that have been reshuffled to be contiguous in memory.
-
         if (options.renderMode == PathTrace::RenderMode::DEFAULT) {
-            shadeIdealDiffuseMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
-                iter, num_paths, dev_intersections, dev_paths, dev_materials);
-            checkCUDAError("shading diffuse material");
-            cudaDeviceSynchronize();
+            bool sortedMaterials = false;
+
+            // Only sort materials if enabled AND we have more paths
+            if (options.contiguousMaterials && num_paths >= options.minPathCountForSorting) {
+                // Sort dev_intersections and dev_paths by material ID
+                thrust::sort_by_key(thrust::device, dev_intersections,
+                                    dev_intersections + num_paths, dev_paths,
+                                    material_comparator());
+                sortedMaterials = true;
+            }
+
+            if (sortedMaterials && options.renderKernelPerMaterial) {
+                // Find material start indices after sorting
+                getMaterialStartIndices<<<numblocksPathSegmentTracing, blockSize1d>>>(
+                    num_paths, dev_intersectionMaterialStartIndices, dev_intersections);
+                checkCUDAError("get material start indices");
+                cudaDeviceSynchronize();
+                // The first [0, dev_intersectionMaterialStartIndices[0]) items of
+                // dev_intersections have t < 0, meaning they didn't intersect with anything.
+
+                // Launch shading kernel for each material contiguously
+                int *hst_materialStartIndices = new int[hst_scene->materials.size()]();
+                cudaMemcpy(hst_materialStartIndices, dev_intersectionMaterialStartIndices,
+                           hst_scene->materials.size() * sizeof(int), cudaMemcpyDeviceToHost);
+
+                // Process intersections with t < 0 (no intersection)
+                int numNoIntersection = hst_materialStartIndices[0];
+                if (numNoIntersection > 0) {
+                    dim3 numBlocksNoIntersection =
+                        (numNoIntersection + blockSize1d - 1) / blockSize1d;
+                    shadeIdealDiffuseMaterial<<<numBlocksNoIntersection, blockSize1d>>>(
+                        iter, numNoIntersection, dev_intersections, dev_paths, dev_materials);
+                    checkCUDAError("shading non-intersected rays");
+                }
+
+                // Process each material type
+                for (int matId = 0; matId < hst_scene->materials.size(); ++matId) {
+                    int startIdx = hst_materialStartIndices[matId];
+                    int endIdx = (matId == hst_scene->materials.size() - 1)
+                                     ? num_paths
+                                     : hst_materialStartIndices[matId + 1];
+                    int numPathsForMaterial = endIdx - startIdx;
+
+                    if (numPathsForMaterial > 0) {
+                        dim3 numBlocksForMaterial =
+                            (numPathsForMaterial + blockSize1d - 1) / blockSize1d;
+                        shadeIdealDiffuseMaterial<<<numBlocksForMaterial, blockSize1d>>>(
+                            iter, numPathsForMaterial, dev_intersections + startIdx,
+                            dev_paths + startIdx, dev_materials);
+                    }
+                }
+                checkCUDAError("shading materials by id");
+                cudaDeviceSynchronize();
+
+                delete[] hst_materialStartIndices;
+
+            } else {
+                shadeIdealDiffuseMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
+                    iter, num_paths, dev_intersections, dev_paths, dev_materials);
+                checkCUDAError("shading diffuse material");
+                cudaDeviceSynchronize();
+            }
         } else if (options.renderMode == PathTrace::RenderMode::AMBIENT_OCCLUSION) {
             shadeAmbientOcclusionPass<<<numblocksPathSegmentTracing, blockSize1d>>>(
                 iter, num_paths, dev_intersections, dev_paths, dev_materials, traceDepth);
@@ -505,7 +590,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter, const PathTrace::Options &optio
         }
 
         PathSegment *new_dev_paths_end = thrust::partition(
-            thrust::device, dev_paths, dev_paths + num_paths, has_remaining_bounces{});
+            thrust::device, dev_paths, dev_paths + num_paths, has_remaining_bounces());
 
         num_paths = new_dev_paths_end - dev_paths;
 
