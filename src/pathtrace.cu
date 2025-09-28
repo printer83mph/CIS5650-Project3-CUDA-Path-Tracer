@@ -280,10 +280,6 @@ __global__ void shadeIdealDiffuseMaterial(int iter, int num_paths,
 
                 segment.remainingBounces--;
             }
-
-            // TODO:
-            // need to make sure that at max depth, a ray that didn't hit any light gets its
-            // segment color set to 0
         }
     } else {
         // We have reached the uncaring void
@@ -292,6 +288,104 @@ __global__ void shadeIdealDiffuseMaterial(int iter, int num_paths,
         // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
         // used for opacity, in which case they can indicate "no opacity".
         // This can be useful for post-processing and image compositing.
+        pathSegments[idx].color = glm::vec3(0.0f);
+        pathSegments[idx].remainingBounces = 0;
+    }
+}
+
+__global__ void shadeAmbientOcclusionPass(int iter, int num_paths,
+                                          ShadeableIntersection *shadeableIntersections,
+                                          PathSegment *pathSegments, Material *materials,
+                                          int bounceDepth) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx > num_paths)
+        return;
+
+    ShadeableIntersection intersection = shadeableIntersections[idx];
+    if (intersection.t > 0.0f) // if the intersection exists...
+    {
+        // Set up the RNG
+        thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
+        thrust::uniform_real_distribution<float> u01(0, 1);
+
+        Material material = materials[intersection.materialId];
+        glm::vec3 materialColor = material.color;
+
+        // If our ray hit something, it should bounce off!
+        PathSegment &segment = pathSegments[idx];
+
+        // Check if this is the last bounce
+        // TODO: there must be a better way of going about this with less divergence
+        if (segment.remainingBounces <= 1) {
+            // we failed, men: no contribution
+            segment.color = glm::vec3(0.0f);
+            segment.remainingBounces = 0;
+        } else {
+            // Apply plain white color
+            glm::vec3 brdf = glm::vec3(1.f) * glm::one_over_pi<float>();
+            segment.color *= brdf * glm::pi<float>();
+
+            // Set up new ray babey
+            scatterRay(segment,
+                       segment.ray.origin + segment.ray.direction * (intersection.t - 0.001f),
+                       intersection.surfaceNormal, material, rng);
+
+            segment.remainingBounces--;
+        }
+
+    } else {
+        // We have reached the uncaring void
+
+        // multiplier should be 0 when on first ray, otherwise 1
+        float multiplier = min(abs((float)bounceDepth - pathSegments[idx].remainingBounces), 1.f);
+        pathSegments[idx].color *= multiplier;
+        // if (bounceDepth == pathSegments[idx].remainingBounces) {
+        //     pathSegments[idx].color = glm::zero<glm::vec3>();
+        // }
+
+        // If there was no intersection, color the ray black.
+        // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
+        // used for opacity, in which case they can indicate "no opacity".
+        // This can be useful for post-processing and image compositing.
+        pathSegments[idx].remainingBounces = 0;
+    }
+}
+
+__global__ void shadeNormalPass(int iter, int num_paths,
+                                ShadeableIntersection *shadeableIntersections,
+                                PathSegment *pathSegments, Material *materials) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx > num_paths)
+        return;
+
+    ShadeableIntersection intersection = shadeableIntersections[idx];
+    if (intersection.t > 0.0f) // if the intersection exists...
+    {
+        pathSegments[idx].color = (intersection.surfaceNormal + glm::vec3(1.f, 1.f, 1.f)) * 0.5f;
+        pathSegments[idx].remainingBounces = 0;
+    }
+
+    else {
+        pathSegments[idx].color = glm::vec3(0.0f);
+        pathSegments[idx].remainingBounces = 0;
+    }
+}
+
+__global__ void shadeDepthPass(int iter, int num_paths,
+                               ShadeableIntersection *shadeableIntersections,
+                               PathSegment *pathSegments, Material *materials, float inv_depthEnd) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx > num_paths)
+        return;
+
+    ShadeableIntersection intersection = shadeableIntersections[idx];
+    if (intersection.t > 0.0f) // if the intersection exists...
+    {
+        pathSegments[idx].color = glm::vec3(glm::max(0.f, 1 - intersection.t * inv_depthEnd));
+        pathSegments[idx].remainingBounces = 0;
+    }
+
+    else {
         pathSegments[idx].color = glm::vec3(0.0f);
         pathSegments[idx].remainingBounces = 0;
     }
@@ -320,12 +414,19 @@ struct has_remaining_bounces {
     }
 };
 
+PathTrace::Options PathTrace::defaultOptions() {
+    PathTrace::Options opts;
+    opts.renderMode = RenderMode::DEFAULT;
+    opts.depthPassMaxDistance = 30.f;
+
+    return opts;
+}
+
 /**
  * Wrapper for the __global__ call that sets up the kernel calls and does a ton
  * of memory management
  */
-void pathtrace(uchar4* pbo, int frame, int iter)
-{
+void pathtrace(uchar4 *pbo, int frame, int iter, const PathTrace::Options &options) {
     const int traceDepth = hst_scene->state.traceDepth;
     const Camera& cam = hst_scene->state.camera;
     const int pixelcount = cam.resolution.x * cam.resolution.y;
@@ -409,10 +510,28 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         // TODO: compare between directly shading the path segments and shading
         // path segments that have been reshuffled to be contiguous in memory.
 
-        shadeIdealDiffuseMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
-            iter, num_paths, dev_intersections, dev_paths, dev_materials);
-        checkCUDAError("shading diffuse material");
-        cudaDeviceSynchronize();
+        if (options.renderMode == PathTrace::RenderMode::DEFAULT) {
+            shadeIdealDiffuseMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
+                iter, num_paths, dev_intersections, dev_paths, dev_materials);
+            checkCUDAError("shading diffuse material");
+            cudaDeviceSynchronize();
+        } else if (options.renderMode == PathTrace::RenderMode::AMBIENT_OCCLUSION) {
+            shadeAmbientOcclusionPass<<<numblocksPathSegmentTracing, blockSize1d>>>(
+                iter, num_paths, dev_intersections, dev_paths, dev_materials, traceDepth);
+            checkCUDAError("shading AO pass");
+            cudaDeviceSynchronize();
+        } else if (options.renderMode == PathTrace::RenderMode::NORMAL) {
+            shadeNormalPass<<<numblocksPathSegmentTracing, blockSize1d>>>(
+                iter, num_paths, dev_intersections, dev_paths, dev_materials);
+            checkCUDAError("shading normal pass");
+            cudaDeviceSynchronize();
+        } else if (options.renderMode == PathTrace::RenderMode::DEPTH) {
+            shadeDepthPass<<<numblocksPathSegmentTracing, blockSize1d>>>(
+                iter, num_paths, dev_intersections, dev_paths, dev_materials,
+                1.f / options.depthPassMaxDistance);
+            checkCUDAError("shading depth pass");
+            cudaDeviceSynchronize();
+        }
 
         PathSegment *new_dev_paths_end = thrust::partition(
             thrust::device, dev_paths, dev_paths + num_paths, has_remaining_bounces{});

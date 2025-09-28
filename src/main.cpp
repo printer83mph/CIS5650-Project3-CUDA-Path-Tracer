@@ -46,6 +46,9 @@ GuiDataContainer* guiData;
 RenderState* renderState;
 int iteration;
 
+// Rendering options tweakable in UI
+PathTrace::Options options;
+
 int width;
 int height;
 
@@ -237,6 +240,7 @@ bool init()
     ImGui_ImplOpenGL3_Init("#version 120");
 
     // Initialize other stuff
+    options = PathTrace::defaultOptions();
     initVAO();
     initTextures();
     initCuda();
@@ -288,6 +292,16 @@ void RenderImGui()
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
 
+    ImGui::Begin("Options");
+    const char *renderModes[] = {"Default", "Ambient Occlusion", "Normal", "Depth"};
+    const int numRenderModes = sizeof(renderModes) / sizeof(renderModes[0]);
+
+    if (ImGui::Combo("Render Mode", (int *)&options.renderMode, renderModes, numRenderModes))
+        camchanged = true;
+    if (ImGui::SliderFloat("Depth Pass Max", &options.depthPassMaxDistance, 0.f, 100.f))
+        camchanged = true;
+
+    ImGui::End();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -458,7 +472,7 @@ void runCuda()
 
         // execute the kernel
         int frame = 0;
-        pathtrace(pbo_dptr, frame, iteration);
+        pathtrace(pbo_dptr, frame, iteration, options);
 
         // unmap buffer object
         cudaGLUnmapBufferObject(pbo);
