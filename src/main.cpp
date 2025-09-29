@@ -322,8 +322,22 @@ void RenderImGui()
         ImGui::EndDisabled();
 
     if (update)
-        camchanged = true;
+        iteration = 0;
+    ImGui::End();
 
+    ImGui::Begin("Camera");
+    bool camUpdate = false;
+
+    renderState = &scene->state;
+    Camera &cam = renderState->camera;
+
+    camUpdate |= ImGui::SliderFloat("Focal Distance", &cam.focalDistance, 0.0f, 25.f);
+    camUpdate |= ImGui::SliderFloat("Aperture Radius", &cam.apertureRadius, 0.0f, 4.f);
+
+    if (camUpdate) {
+        camchanged = true;
+        iteration = 0;
+    }
     ImGui::End();
 
     ImGui::Render();

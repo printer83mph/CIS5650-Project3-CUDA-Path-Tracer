@@ -153,7 +153,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
         thrust::default_random_engine rng =
             makeSeededRandomEngine(iter, y * cam.resolution.x + x, 0);
-        thrust::uniform_real_distribution<float> u01(-0.5f, 0.5f);
+        thrust::uniform_real_distribution<float> u01(0.f, 1.f);
 
         segment.ray.direction = glm::normalize(
             cam.view -
@@ -161,6 +161,19 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
                 ((float)x - (float)cam.resolution.x * 0.5f + u01(rng)) -
             cam.up * cam.pixelLength.y *
                 ((float)y - (float)cam.resolution.y * 0.5f + u01(rng)));
+
+        float forwardComponent = glm::dot(segment.ray.direction, cam.view);
+        glm::vec3 focalPoint =
+            segment.ray.origin + segment.ray.direction * cam.focalDistance / forwardComponent;
+
+        float angle = u01(rng) * glm::two_pi<float>();
+        float radius = sqrt(u01(rng));
+        glm::vec3 randomAperturePoint =
+            cam.position +
+            (cam.up * sin(angle) + cam.right * cos(angle)) * radius * cam.apertureRadius;
+
+        segment.ray.origin = randomAperturePoint;
+        segment.ray.direction = glm::normalize(focalPoint - randomAperturePoint);
 
         segment.pixelIndex = index;
         segment.remainingBounces = traceDepth;
