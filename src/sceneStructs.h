@@ -19,7 +19,7 @@ struct Ray
 };
 
 struct AABB {
-    glm::vec3 boundsMin, boundsMax;
+    glm::vec3 min, max;
 };
 
 struct Triangle {
@@ -29,7 +29,6 @@ struct Triangle {
 
 struct Mesh {
     std::vector<Triangle> triangles;
-    glm::vec3 boundsMin, boundsMax;
 };
 
 struct Geom

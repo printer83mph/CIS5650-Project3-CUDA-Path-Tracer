@@ -174,6 +174,8 @@ void importObj(const std::string &filename, Mesh &mesh) {
     auto &attrib = reader.GetAttrib();
     auto &shapes = reader.GetShapes();
 
+    // Enable if we precompute mesh bounds - not very useful it turns out
+#if 0
     if (shapes.size() > 0) {
         mesh.boundsMin = glm::vec3(std::numeric_limits<float>::max());
         mesh.boundsMax = glm::vec3(std::numeric_limits<float>::min());
@@ -181,6 +183,7 @@ void importObj(const std::string &filename, Mesh &mesh) {
         mesh.boundsMin = glm::zero<glm::vec3>();
         mesh.boundsMax = glm::zero<glm::vec3>();
     }
+#endif
 
     for (const auto &shape : shapes) {
         size_t index_offset = 0;
@@ -199,8 +202,11 @@ void importObj(const std::string &filename, Mesh &mesh) {
 
                     triangle.vertices[v][axis] = value;
 
+                    // Enable if we precompute mesh bounds - not very useful it turns out
+#if 0
                     mesh.boundsMax[axis] = glm::max(mesh.boundsMax[axis], value);
                     mesh.boundsMin[axis] = glm::min(mesh.boundsMin[axis], value);
+#endif
                 }
 
                 // Check if `normal_index` is zero or positive. negative = no normal data
