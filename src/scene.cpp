@@ -6,8 +6,8 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
 
-#include "json.hpp"
-#include "tiny_obj_loader.h"
+#include <json.hpp>
+#include <tiny_obj_loader.h>
 
 #include <filesystem>
 #include <fstream>
