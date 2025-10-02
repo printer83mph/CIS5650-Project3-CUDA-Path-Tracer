@@ -3,17 +3,18 @@
 #include "sceneStructs.h"
 #include <vector>
 
+void importObj(const std::string &filename, Mesh &mesh);
+
 class Scene
 {
 private:
-    void loadFromJSON(const std::string& jsonName);
-    void importObj(const std::string &objName, Mesh &mesh);
+  void loadFromJSON(const std::string &jsonName);
 
-  public:
-    Scene(std::string filename);
+public:
+  Scene(std::string filename);
 
-    std::vector<Geom> geoms;
-    std::vector<Material> materials;
-    std::vector<Mesh> meshes;
-    RenderState state;
+  std::vector<Geom> geoms;
+  std::vector<Material> materials;
+  std::vector<Mesh> meshes;
+  RenderState state;
 };

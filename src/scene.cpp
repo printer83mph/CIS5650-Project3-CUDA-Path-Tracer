@@ -2,14 +2,17 @@
 
 #include "utilities.h"
 
+#include <glm/detail/type_vec.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
-#include "json.hpp"
 
+#include "json.hpp"
 #include "tiny_obj_loader.h"
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <unordered_map>
 
@@ -37,6 +40,9 @@ void Scene::loadFromJSON(const std::string& jsonName)
 {
     std::ifstream f(jsonName);
     json data = json::parse(f);
+
+    // Used to do relative pathing for ye obj files
+    std::filesystem::path jsonFolder = std::filesystem::path(jsonName).parent_path();
 
     const auto& materialsData = data["Materials"];
     std::unordered_map<std::string, uint32_t> MatNameToID;
@@ -74,7 +80,7 @@ void Scene::loadFromJSON(const std::string& jsonName)
 
         MeshNameToID[name] = meshes.size();
         auto newMesh = this->meshes.emplace_back(Mesh{});
-        importObj(p, newMesh);
+        importObj(jsonFolder / std::filesystem::path(p), newMesh);
     }
 
     const auto& objectsData = data["Objects"];
@@ -146,9 +152,8 @@ void Scene::loadFromJSON(const std::string& jsonName)
     std::fill(state.image.begin(), state.image.end(), glm::vec3());
 }
 
-void Scene::importObj(const std::string &filename, Mesh &mesh) {
+void importObj(const std::string &filename, Mesh &mesh) {
     tinyobj::ObjReaderConfig reader_config;
-    reader_config.mtl_search_path = "./"; // Path to material files
     reader_config.triangulate = true;
     reader_config.triangulation_method = "simple";
 
@@ -168,26 +173,48 @@ void Scene::importObj(const std::string &filename, Mesh &mesh) {
     auto &attrib = reader.GetAttrib();
     auto &shapes = reader.GetShapes();
 
+    if (shapes.size() > 0) {
+        mesh.boundsMin = glm::vec3(std::numeric_limits<float>::max());
+        mesh.boundsMax = glm::vec3(std::numeric_limits<float>::min());
+    } else {
+        mesh.boundsMin = glm::zero<glm::vec3>();
+        mesh.boundsMax = glm::zero<glm::vec3>();
+    }
+
     for (const auto &shape : shapes) {
         size_t index_offset = 0;
 
         for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); ++f) {
             size_t fv = size_t(shape.mesh.num_face_vertices[f]);
+            std::cout << "processing shape with " << fv << " vertices" << std::endl;
 
             auto &triangle = mesh.triangles.emplace_back(Triangle{});
             for (size_t v = 0; v < fv; ++v) {
                 tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
-                triangle.vertices[v].x = attrib.vertices[3 * size_t(idx.vertex_index) + 0];
-                triangle.vertices[v].y = attrib.vertices[3 * size_t(idx.vertex_index) + 1];
-                triangle.vertices[v].z = attrib.vertices[3 * size_t(idx.vertex_index) + 2];
+                for (int axis = 0; axis < 3; ++axis) {
+                    float value = attrib.vertices[3 * size_t(idx.vertex_index) + axis];
+
+                    triangle.vertices[v][axis] = value;
+
+                    mesh.boundsMax[axis] = glm::max(mesh.boundsMax[axis], value);
+                    mesh.boundsMin[axis] = glm::min(mesh.boundsMin[axis], value);
+                }
 
                 // Check if `normal_index` is zero or positive. negative = no normal data
                 if (idx.normal_index >= 0) {
-                    triangle.normals[v].x = attrib.normals[3 * size_t(idx.vertex_index) + 0];
-                    triangle.normals[v].y = attrib.normals[3 * size_t(idx.vertex_index) + 1];
-                    triangle.normals[v].z = attrib.normals[3 * size_t(idx.vertex_index) + 2];
+                    for (int axis = 0; axis < 3; ++axis)
+                        triangle.normals[v][axis] =
+                            attrib.normals[3 * size_t(idx.vertex_index) + axis];
                 }
             }
+            std::cout << "triangle created with vertices:" << std::endl
+                      << triangle.vertices[0].x << ", " << triangle.vertices[0].y << ", "
+                      << triangle.vertices[0].z << std::endl
+                      << triangle.vertices[1].x << ", " << triangle.vertices[1].y << ", "
+                      << triangle.vertices[1].z << std::endl
+                      << triangle.vertices[2].x << ", " << triangle.vertices[2].y << ", "
+                      << triangle.vertices[2].z << std::endl
+                      << std::endl;
 
             index_offset += fv;
         }
