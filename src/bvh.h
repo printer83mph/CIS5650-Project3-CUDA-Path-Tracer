@@ -6,7 +6,7 @@
 
 #include <vector>
 
-#define MAX_PRIMITIVES_PER_NODE
+#define MAX_PRIMITIVES_PER_NODE 4
 
 namespace BVH {
 
@@ -20,8 +20,8 @@ template <typename T> struct Primitive {
 template <typename T> struct FlatNode {
     AABB bounds;
     bool is_leaf;
-    T leaf_data;
-    size_t child_offsets[MAX_PRIMITIVES_PER_NODE];
+    size_t child_offsets[2];
+    T leaf_data[MAX_PRIMITIVES_PER_NODE];
 };
 
 template <typename T> FlatNode<T> buildTree(const std::vector<Primitive<T>> &primitives);
