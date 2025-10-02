@@ -56,6 +56,7 @@ set(headers
     src/pathtrace.h
     src/scene.h
     src/sceneStructs.h
+    src/bvh.h
     src/utilities.h
 )
 
@@ -68,6 +69,7 @@ set(sources
     src/intersections.cu
     src/interactions.cu
     src/scene.cpp
+    src/bvh.cpp
     src/utilities.cpp
 )
 
