@@ -38,6 +38,13 @@ __host__ __device__ inline glm::vec3 multiplyMV(glm::mat4 m, glm::vec4 v)
     return glm::vec3(m * v);
 }
 
+/**
+ * Test intersection between a ray and a bounded region (AABB).
+ *
+ * @return                   Ray parameter `t` value. -1 if no intersection.
+ */
+__host__ __device__ float AABBRayIntersectionTest(Ray ray, AABB aabb);
+
 // CHECKITOUT
 /**
  * Test intersection between a ray and a transformed cube. Untransformed,

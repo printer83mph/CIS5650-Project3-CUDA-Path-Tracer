@@ -56,6 +56,31 @@ __host__ __device__ float boxIntersectionTest(
     return -1;
 }
 
+__host__ __device__ float AABBRayIntersectionTest(Ray ray, AABB aabb) {
+    float t1 = (aabb.boundsMin.x - ray.origin.x) / ray.direction.x;
+    float t2 = (aabb.boundsMax.x - ray.origin.x) / ray.direction.x;
+    float t3 = (aabb.boundsMin.y - ray.origin.y) / ray.direction.y;
+    float t4 = (aabb.boundsMax.y - ray.origin.y) / ray.direction.y;
+    float t5 = (aabb.boundsMin.z - ray.origin.z) / ray.direction.z;
+    float t6 = (aabb.boundsMax.z - ray.origin.z) / ray.direction.z;
+
+    float tmin = glm::max(glm::max(glm::min(t1, t2), glm::min(t3, t4)), glm::min(t5, t6));
+    float tmax = glm::min(glm::min(glm::max(t1, t2), glm::max(t3, t4)), glm::max(t5, t6));
+
+    // if tmax < 0, ray (line) is intersecting AABB, but whole AABB is behing us
+    if (tmax < 0)
+        return -1;
+
+    // if tmin > tmax, ray doesn't intersect AABB
+    if (tmin > tmax)
+        return -1;
+
+    if (tmin < 0.f)
+        return tmax;
+
+    return tmin;
+}
+
 __host__ __device__ float sphereIntersectionTest(
     Geom sphere,
     Ray r,
