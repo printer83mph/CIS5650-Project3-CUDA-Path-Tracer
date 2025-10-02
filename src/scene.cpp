@@ -159,6 +159,7 @@ void importObj(const std::string &filename, Mesh &mesh) {
 
     tinyobj::ObjReader reader;
 
+    std::cout << "Loading OBJ file: " << filename << std::endl;
     if (!reader.ParseFromFile(filename, reader_config)) {
         if (!reader.Error().empty()) {
             std::cerr << "TinyObjReader: " << reader.Error();
@@ -184,9 +185,11 @@ void importObj(const std::string &filename, Mesh &mesh) {
     for (const auto &shape : shapes) {
         size_t index_offset = 0;
 
+        std::cout << "loading shape with " << shape.mesh.num_face_vertices.size() << " faces"
+                  << std::endl;
         for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); ++f) {
             size_t fv = size_t(shape.mesh.num_face_vertices[f]);
-            std::cout << "processing shape with " << fv << " vertices" << std::endl;
+            // std::cout << "processing face with " << fv << " vertices" << std::endl;
 
             auto &triangle = mesh.triangles.emplace_back(Triangle{});
             for (size_t v = 0; v < fv; ++v) {
@@ -207,14 +210,14 @@ void importObj(const std::string &filename, Mesh &mesh) {
                             attrib.normals[3 * size_t(idx.vertex_index) + axis];
                 }
             }
-            std::cout << "triangle created with vertices:" << std::endl
-                      << triangle.vertices[0].x << ", " << triangle.vertices[0].y << ", "
-                      << triangle.vertices[0].z << std::endl
-                      << triangle.vertices[1].x << ", " << triangle.vertices[1].y << ", "
-                      << triangle.vertices[1].z << std::endl
-                      << triangle.vertices[2].x << ", " << triangle.vertices[2].y << ", "
-                      << triangle.vertices[2].z << std::endl
-                      << std::endl;
+            // std::cout << "triangle created with vertices:" << std::endl
+            //           << triangle.vertices[0].x << ", " << triangle.vertices[0].y << ", "
+            //           << triangle.vertices[0].z << std::endl
+            //           << triangle.vertices[1].x << ", " << triangle.vertices[1].y << ", "
+            //           << triangle.vertices[1].z << std::endl
+            //           << triangle.vertices[2].x << ", " << triangle.vertices[2].y << ", "
+            //           << triangle.vertices[2].z << std::endl
+            //           << std::endl;
 
             index_offset += fv;
         }
