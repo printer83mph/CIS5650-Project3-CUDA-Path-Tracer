@@ -6,6 +6,8 @@
 #include <glm/gtx/string_cast.hpp>
 #include "json.hpp"
 
+#include "tiny_obj_loader.h"
+
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -35,6 +37,7 @@ void Scene::loadFromJSON(const std::string& jsonName)
 {
     std::ifstream f(jsonName);
     json data = json::parse(f);
+
     const auto& materialsData = data["Materials"];
     std::unordered_map<std::string, uint32_t> MatNameToID;
     for (const auto& item : materialsData.items())
@@ -62,18 +65,30 @@ void Scene::loadFromJSON(const std::string& jsonName)
         MatNameToID[name] = materials.size();
         materials.emplace_back(newMaterial);
     }
+
+    const auto &meshesData = data["Meshes"];
+    std::unordered_map<std::string, uint32_t> MeshNameToID;
+    for (const auto &item : meshesData.items()) {
+        const auto &name = item.key();
+        const auto &p = item.value();
+
+        MeshNameToID[name] = meshes.size();
+        auto newMesh = this->meshes.emplace_back(Mesh{});
+        importObj(p, newMesh);
+    }
+
     const auto& objectsData = data["Objects"];
     for (const auto& p : objectsData)
     {
         const auto& type = p["TYPE"];
         Geom newGeom;
-        if (type == "cube")
-        {
+        if (type == "cube") {
             newGeom.type = CUBE;
-        }
-        else
-        {
+        } else if (type == "sphere") {
             newGeom.type = SPHERE;
+        } else if (type == "mesh") {
+            newGeom.type = MESH;
+            newGeom.meshId = MeshNameToID[p["MESH"]];
         }
         newGeom.materialid = MatNameToID[p["MATERIAL"]];
         const auto& trans = p["TRANS"];
@@ -87,7 +102,7 @@ void Scene::loadFromJSON(const std::string& jsonName)
         newGeom.inverseTransform = glm::inverse(newGeom.transform);
         newGeom.invTranspose = glm::inverseTranspose(newGeom.transform);
 
-        geoms.push_back(newGeom);
+        this->geoms.push_back(newGeom);
     }
     const auto& cameraData = data["Camera"];
     Camera& camera = state.camera;
@@ -129,4 +144,52 @@ void Scene::loadFromJSON(const std::string& jsonName)
     int arraylen = camera.resolution.x * camera.resolution.y;
     state.image.resize(arraylen);
     std::fill(state.image.begin(), state.image.end(), glm::vec3());
+}
+
+void Scene::importObj(const std::string &filename, Mesh &mesh) {
+    tinyobj::ObjReaderConfig reader_config;
+    reader_config.mtl_search_path = "./"; // Path to material files
+    reader_config.triangulate = true;
+    reader_config.triangulation_method = "simple";
+
+    tinyobj::ObjReader reader;
+
+    if (!reader.ParseFromFile(filename, reader_config)) {
+        if (!reader.Error().empty()) {
+            std::cerr << "TinyObjReader: " << reader.Error();
+        }
+        exit(1);
+    }
+
+    if (!reader.Warning().empty()) {
+        std::cout << "TinyObjReader: " << reader.Warning();
+    }
+
+    auto &attrib = reader.GetAttrib();
+    auto &shapes = reader.GetShapes();
+
+    for (const auto &shape : shapes) {
+        size_t index_offset = 0;
+
+        for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); ++f) {
+            size_t fv = size_t(shape.mesh.num_face_vertices[f]);
+
+            auto &triangle = mesh.triangles.emplace_back(Triangle{});
+            for (size_t v = 0; v < fv; ++v) {
+                tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
+                triangle.vertices[v].x = attrib.vertices[3 * size_t(idx.vertex_index) + 0];
+                triangle.vertices[v].y = attrib.vertices[3 * size_t(idx.vertex_index) + 1];
+                triangle.vertices[v].z = attrib.vertices[3 * size_t(idx.vertex_index) + 2];
+
+                // Check if `normal_index` is zero or positive. negative = no normal data
+                if (idx.normal_index >= 0) {
+                    triangle.normals[v].x = attrib.normals[3 * size_t(idx.vertex_index) + 0];
+                    triangle.normals[v].y = attrib.normals[3 * size_t(idx.vertex_index) + 1];
+                    triangle.normals[v].z = attrib.normals[3 * size_t(idx.vertex_index) + 2];
+                }
+            }
+
+            index_offset += fv;
+        }
+    }
 }

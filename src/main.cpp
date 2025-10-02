@@ -1,3 +1,5 @@
+#define TINYOBJLOADER_IMPLEMENTATION
+
 #include "glslUtility.hpp"
 #include "image.h"
 #include "pathtrace.h"

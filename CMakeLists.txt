@@ -111,6 +111,19 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     ${GL_LIBRARIES}
     #stream_compaction  # TODO: uncomment if using your stream compaction
 )
+
+include(FetchContent)
+FetchContent_Declare(
+    tinyobjloader
+    GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
+    GIT_TAG        a4e519b0a0f29c790464fcfeadfe25a7f9fa15ff # release as of Sept 2025
+)
+FetchContent_MakeAvailable(tinyobjloader)
+
+target_link_libraries(tinyobjloader INTERFACE)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${tinyobjloader_SOURCE_DIR})
+
+
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES native)
 

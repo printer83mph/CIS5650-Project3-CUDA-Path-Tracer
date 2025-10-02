@@ -2,18 +2,15 @@
 
 #include <cuda_runtime.h>
 
-#include "glm/glm.hpp"
+#include <glm/glm.hpp>
+#include <tiny_obj_loader.h>
 
 #include <string>
 #include <vector>
 
 #define BACKGROUND_COLOR (glm::vec3(0.0f))
 
-enum GeomType
-{
-    SPHERE,
-    CUBE
-};
+enum GeomType { SPHERE, CUBE, MESH };
 
 struct Ray
 {
@@ -21,10 +18,22 @@ struct Ray
     glm::vec3 direction;
 };
 
+struct Triangle {
+    glm::vec3 vertices[3];
+    glm::vec3 normals[3];
+};
+
+struct Mesh {
+    std::vector<Triangle> triangles;
+    glm::vec3 boundsMin;
+    glm::vec3 boundsMax;
+};
+
 struct Geom
 {
     enum GeomType type;
     int materialid;
+    int meshId;
     glm::vec3 translation;
     glm::vec3 rotation;
     glm::vec3 scale;
