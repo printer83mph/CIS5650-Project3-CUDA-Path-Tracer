@@ -104,7 +104,7 @@ template <typename T> Tree<T> createFlatTree(const BuildNode<T> &rootNode) {
         const BuildNode<T> *currentNode = nodeStack.back();
         nodeStack.pop_back();
 
-        FlatNode<T> flatNode;
+        FlatNode flatNode;
         flatNode.bounds = currentNode->bounds;
         flatNode.isLeaf = currentNode->isLeaf;
 
@@ -140,8 +140,7 @@ template <typename T> Tree<T> createFlatTree(const BuildNode<T> &rootNode) {
 
 } // namespace
 
-template <typename T>
-std::vector<FlatNode<T>> buildTree(const std::vector<Primitive<T>> &primitives) {
+template <typename T> std::vector<FlatNode> buildTree(const std::vector<Primitive<T>> &primitives) {
     // Step 1: create initially flat vector of BuildNodes
     std::vector<std::unique_ptr<BuildNode<T>>> buildNodes;
 

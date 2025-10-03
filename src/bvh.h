@@ -17,7 +17,7 @@ template <typename T> struct Primitive {
 };
 
 // Output node
-template <typename T> struct FlatNode {
+struct FlatNode {
     AABB bounds;
     bool isLeaf;
     union {
@@ -31,9 +31,8 @@ template <typename T> struct FlatNode {
 
 // Tree output
 template <typename T> struct Tree {
-    std::vector<FlatNode<T>> nodes;
+    std::vector<FlatNode> nodes;
     std::vector<T> leafData;
-    std::vector<T> leafBounds;
 };
 
 template <typename T> Tree<T> buildTree(const std::vector<Primitive<T>> &primitives);
