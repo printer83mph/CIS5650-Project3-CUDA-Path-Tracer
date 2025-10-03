@@ -205,20 +205,14 @@ __global__ void computeIntersections(
         glm::vec3 tmp_normal;
 
         // naive parse through global geoms
+        // TODO: run through BVH structure with BVHIntersectionTest
 
         for (int i = 0; i < geoms_size; i++)
         {
             Geom& geom = geoms[i];
 
-            if (geom.type == CUBE)
-            {
-                t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
-            }
-            else if (geom.type == SPHERE)
-            {
-                t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
-            }
-            // TODO: add more intersection tests here... triangle? metaball? CSG?
+            t = pickGeometryIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal,
+                                             outside);
 
             // Compute the minimum t from the intersection tests to determine what
             // scene geometry object was hit first.
