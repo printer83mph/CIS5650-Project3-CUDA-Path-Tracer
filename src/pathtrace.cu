@@ -5,10 +5,10 @@
 
 #include <cstdio>
 #include <cuda.h>
-#include <iostream>
 #include <thrust/execution_policy.h>
 #include <thrust/partition.h>
 #include <thrust/random.h>
+#include <vector>
 
 #include "interactions.h"
 #include "intersections.h"
@@ -81,6 +81,8 @@ static GuiDataContainer* guiData = NULL;
 static glm::vec3* dev_image = NULL;
 static Geom* dev_geoms = NULL;
 static BVH::FlatNode *dev_BVHTree = NULL;
+static Triangle *dev_meshTriangles = NULL;
+static GpuMesh *dev_meshes = NULL;
 static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
@@ -114,6 +116,27 @@ void pathtraceInit(Scene* scene)
 
     // std::cout << "loaded " << scene->bvhNodes.size() << " bvh nodes" << std::endl;
 
+    std::vector<Triangle> tris;
+    std::vector<GpuMesh> meshes;
+    // printf("hello!");
+    for (Mesh &mesh : scene->meshes) {
+        // Insert all ye mesh data into device array
+        meshes.push_back(GpuMesh{mesh.bounds, tris.size(), mesh.triangles.size()});
+        printf("added a mesh with %zu triangles, bounds: [%.2f,%.2f,%.2f] to [%.2f,%.2f,%.2f]\n",
+               mesh.triangles.size(), mesh.bounds.min.x, mesh.bounds.min.y, mesh.bounds.min.z,
+               mesh.bounds.max.x, mesh.bounds.max.y, mesh.bounds.max.z);
+        // Insert all triangles into device array
+        tris.reserve(tris.size() + mesh.triangles.size());
+        tris.insert(tris.end(), mesh.triangles.begin(), mesh.triangles.end());
+    }
+
+    cudaMalloc(&dev_meshTriangles, tris.size() * sizeof(Triangle));
+    cudaMemcpy(dev_meshTriangles, tris.data(), tris.size() * sizeof(Triangle),
+               cudaMemcpyHostToDevice);
+
+    cudaMalloc(&dev_meshes, meshes.size() * sizeof(GpuMesh));
+    cudaMemcpy(dev_meshes, meshes.data(), meshes.size() * sizeof(GpuMesh), cudaMemcpyHostToDevice);
+
     cudaMalloc(&dev_materials, scene->materials.size() * sizeof(Material));
     cudaMemcpy(dev_materials, scene->materials.data(), scene->materials.size() * sizeof(Material), cudaMemcpyHostToDevice);
 
@@ -133,6 +156,8 @@ void pathtraceFree()
     cudaFree(dev_paths);
     cudaFree(dev_geoms);
     cudaFree(dev_BVHTree);
+    cudaFree(dev_meshTriangles);
+    cudaFree(dev_meshes);
     cudaFree(dev_materials);
     cudaFree(dev_intersections);
     cudaFree(dev_intersectionMaterialStartIndices);
@@ -191,7 +216,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 }
 
 __global__ void computeIntersections(int depth, int num_paths, PathSegment *pathSegments,
-                                     Geom *geoms, BVH::FlatNode *bvhTree, int geoms_size,
+                                     Geom *geoms, BVH::FlatNode *bvhTree, Triangle *meshTriangles,
+                                     GpuMesh *meshes, int geoms_size,
                                      ShadeableIntersection *intersections) {
     int path_index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -210,8 +236,8 @@ __global__ void computeIntersections(int depth, int num_paths, PathSegment *path
         glm::vec3 tmp_normal;
 
         // Run fancy BVH intersection test
-        t_min = BVHGeomIntersectionTest(bvhTree, geoms, pathSegment.ray, intersect_point, normal,
-                                        outside, &hit_geom_index);
+        t_min = BVHGeomIntersectionTest(bvhTree, geoms, meshTriangles, meshes, pathSegment.ray,
+                                        intersect_point, normal, outside, &hit_geom_index);
 
 #if 0 // old naive parse through global geoms
         for (int i = 0; i < geoms_size; i++)
@@ -512,8 +538,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter, const PathTrace::Options &optio
         // tracing
         dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
         computeIntersections<<<numblocksPathSegmentTracing, blockSize1d>>>(
-            depth, num_paths, dev_paths, dev_geoms, dev_BVHTree, hst_scene->geoms.size(),
-            dev_intersections);
+            depth, num_paths, dev_paths, dev_geoms, dev_BVHTree, dev_meshTriangles, dev_meshes,
+            hst_scene->geoms.size(), dev_intersections);
         checkCUDAError("trace one bounce");
         cudaDeviceSynchronize();
         depth++;

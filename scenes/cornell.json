@@ -87,19 +87,12 @@
             "SCALE":[0.01,10.0,10.0]
         },
         {
-            "TYPE":"sphere",
-            "MATERIAL":"specular_white",
-            "TRANS":[-1.0,4.0,-1.0],
-            "ROTAT":[0.0,0.0,0.0],
-            "SCALE":[3.0,3.0,3.0]
-        },
-        {
             "TYPE":"mesh",
+            "MESH": "bunny",
             "MATERIAL":"diffuse_white",
-            "MESH":"bunny",
-            "TRANS":[2.0,1.0,2.0],
+            "TRANS":[0.0,2.0,0.0],
             "ROTAT":[0.0,0.0,0.0],
-            "SCALE":[1.0,1.0,1.0]
+            "SCALE":[25.0,25.0,25.0]
         }
     ],
     "Meshes": {

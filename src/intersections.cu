@@ -1,9 +1,9 @@
 #include "bvh.h"
 #include "intersections.h"
 #include "sceneStructs.h"
-#include <limits>
 
-__host__ __device__ float pickGeometryIntersectionTest(Geom geom, Ray r,
+__host__ __device__ float pickGeometryIntersectionTest(Geom geom, Triangle *meshTriangles,
+                                                       GpuMesh *meshes, Ray r,
                                                        glm::vec3 &intersectionPoint,
                                                        glm::vec3 &normal, bool &outside) {
     if (geom.type == CUBE) {
@@ -12,9 +12,15 @@ __host__ __device__ float pickGeometryIntersectionTest(Geom geom, Ray r,
         return sphereIntersectionTest(geom, r, intersectionPoint, normal, outside);
     } else if (geom.type == MESH) {
         // Naive implementation: iterate through triangles, run tri intersection on each
-        // TODO
-        return boxIntersectionTest(geom, r, intersectionPoint, normal, outside);
+        const GpuMesh &mesh = meshes[geom.meshId];
+        const Triangle *triStartPtr = &meshTriangles[mesh.trianglesIndex];
+        int triCount = mesh.triangleCount;
+        return meshIntersectionTest(geom, triStartPtr, triCount, r, intersectionPoint, normal,
+                                    outside);
     }
+
+    // default to cube
+    return boxIntersectionTest(geom, r, intersectionPoint, normal, outside);
 }
 
 __host__ __device__ float AABBRayIntersectionTest(Ray ray, AABB aabb) {
@@ -158,7 +164,7 @@ __host__ __device__ float sphereIntersectionTest(
 __host__ __device__ float triangleIntersectionTest(Triangle tri, Ray r,
                                                    glm::vec3 &intersectionPoint, glm::vec3 &normal,
                                                    bool &outside) {
-    // Möller-Trumbore ray-triangle intersection algorithm
+    // Moller-Trumbore ray-triangle intersection algorithm
     glm::vec3 v0 = tri.vertices[0];
     glm::vec3 v1 = tri.vertices[1];
     glm::vec3 v2 = tri.vertices[2];
@@ -206,16 +212,52 @@ __host__ __device__ float triangleIntersectionTest(Triangle tri, Ray r,
     return -1;
 }
 
-__host__ __device__ float meshIntersectionTest(const Geom &geom, const Mesh &mesh) {
-    for (auto &face : mesh.triangles) {
+__host__ __device__ float meshIntersectionTest(const Geom &geom, const Triangle *triangles,
+                                               size_t triangleCount, Ray r,
+                                               glm::vec3 &intersectionPoint, glm::vec3 &normal,
+                                               bool &outside) {
+
+    float closestT = FLT_MAX;
+    bool hitFound = false;
+    glm::vec3 closestPoint, closestNormal;
+    bool closestOutside;
+
+    for (int i = 0; i < triangleCount; i++) {
+        glm::vec3 tempPoint, tempNormal;
+        bool tempOutside;
+
+        Triangle tri = triangles[i];
+#pragma unroll // Transform vertices
+        for (int vert = 0; vert < 3; ++vert)
+            tri.vertices[vert] = multiplyMV(geom.transform, glm::vec4(tri.vertices[vert], 1.f));
+
+        float t = triangleIntersectionTest(tri, r, tempPoint, tempNormal, tempOutside);
+
+        if (t > 0 && t < closestT) {
+            closestT = t;
+            closestPoint = tempPoint;
+            closestNormal = tempNormal;
+            closestOutside = tempOutside;
+            hitFound = true;
+        }
     }
+
+    if (hitFound) {
+        intersectionPoint = closestPoint;
+        normal = closestNormal;
+        outside = closestOutside;
+        return closestT;
+    }
+
+    return -1;
 }
 
 /**
  * @param nodes  BVH tree root node pointer, with remainder of nodes continuing after
  * @param geoms  Geometry array to which BVH nodes point
  */
-__host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *geoms, Ray r,
+__host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *geoms,
+                                                  Triangle *meshTriangles, GpuMesh *meshes, Ray r,
                                                   glm::vec3 &intersectionPoint, glm::vec3 &normal,
                                                   bool &outside, int *hitGeomIndex) {
     const int MAX_STACK = 2048;
@@ -224,7 +266,7 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
     int stackPtr = 0;
     nodeStack[stackPtr++] = 0; // Start with root node
 
-    float closestT = std::numeric_limits<float>::max();
+    float closestT = FLT_MAX;
     bool hitFound = false;
 
     while (stackPtr > 0) {
@@ -245,8 +287,8 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
                 bool tempOutside;
                 Geom &geom = geoms[i];
 
-                float tempT =
-                    pickGeometryIntersectionTest(geom, r, tempPoint, tempNormal, tempOutside);
+                float tempT = pickGeometryIntersectionTest(geom, meshTriangles, meshes, r,
+                                                           tempPoint, tempNormal, tempOutside);
 
                 if (tempT > 0 && tempT < closestT) {
                     closestT = tempT;
@@ -277,8 +319,8 @@ __host__ __device__ AABB getBoxBounds(Geom box) {
 
     // Transform all corners to world space
     AABB bounds;
-    bounds.min = glm::vec3(std::numeric_limits<float>::max());
-    bounds.max = glm::vec3(-std::numeric_limits<float>::max());
+    bounds.min = glm::vec3(FLT_MAX);
+    bounds.max = glm::vec3(-FLT_MAX);
 
     for (int i = 0; i < 8; ++i) {
         glm::vec3 worldCorner = multiplyMV(box.transform, glm::vec4(corners[i], 1.0f));
@@ -308,8 +350,8 @@ __host__ __device__ AABB getMeshBounds(const Geom &meshGeom, const Mesh &mesh) {
 
     // Transform all corners to world space
     AABB bounds;
-    bounds.min = glm::vec3(std::numeric_limits<float>::max());
-    bounds.max = glm::vec3(-std::numeric_limits<float>::max());
+    bounds.min = glm::vec3(FLT_MAX);
+    bounds.max = glm::vec3(-FLT_MAX);
 
     for (int i = 0; i < 8; ++i) {
         glm::vec3 worldCorner = multiplyMV(meshGeom.transform, glm::vec4(corners[i], 1.0f));

@@ -32,6 +32,12 @@ struct Mesh {
     std::vector<Triangle> triangles;
 };
 
+struct GpuMesh {
+    AABB bounds;
+    size_t trianglesIndex;
+    size_t triangleCount;
+};
+
 struct Geom
 {
     enum GeomType type;

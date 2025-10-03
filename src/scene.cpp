@@ -83,8 +83,8 @@ void Scene::loadFromJSON(const std::string& jsonName)
         const auto &p = item.value();
 
         MeshNameToID[name] = meshes.size();
-        auto newMesh = this->meshes.emplace_back(Mesh{});
-        importObj(jsonFolder / std::filesystem::path(p), newMesh);
+        this->meshes.emplace_back(Mesh{});
+        importObj(jsonFolder / std::filesystem::path(p), this->meshes.back());
     }
 
     const auto& objectsData = data["Objects"];
@@ -196,8 +196,8 @@ void importObj(const std::string &filename, Mesh &mesh) {
     auto &shapes = reader.GetShapes();
 
     if (shapes.size() > 0) {
-        mesh.bounds.min = glm::vec3(std::numeric_limits<float>::max());
-        mesh.bounds.max = glm::vec3(std::numeric_limits<float>::min());
+        mesh.bounds.min = glm::vec3(FLT_MAX);
+        mesh.bounds.max = glm::vec3(FLT_MIN);
     } else {
         mesh.bounds.min = glm::zero<glm::vec3>();
         mesh.bounds.max = glm::zero<glm::vec3>();

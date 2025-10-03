@@ -42,7 +42,8 @@ __host__ __device__ inline glm::vec3 multiplyMV(glm::mat4 m, glm::vec4 v)
 /**
  * Pick appropriate geometry method!
  */
-__host__ __device__ float pickGeometryIntersectionTest(Geom geom, Ray r,
+__host__ __device__ float pickGeometryIntersectionTest(Geom geom, Triangle *meshTriangles,
+                                                       GpuMesh *meshes, Ray r,
                                                        glm::vec3 &intersectionPoint,
                                                        glm::vec3 &normal, bool &outside);
 
@@ -91,7 +92,13 @@ __host__ __device__ float triangleIntersectionTest(Triangle tri, Ray r,
                                                    glm::vec3 &intersectionPoint, glm::vec3 &normal,
                                                    bool &outside);
 
-__host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *geoms, Ray r,
+__host__ __device__ float meshIntersectionTest(const Geom &geom, const Triangle *triangles,
+                                               size_t triangleCount, Ray r,
+                                               glm::vec3 &intersectionPoint, glm::vec3 &normal,
+                                               bool &outside);
+
+__host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *geoms,
+                                                  Triangle *meshTriangles, GpuMesh *meshes, Ray r,
                                                   glm::vec3 &intersectionPoint, glm::vec3 &normal,
                                                   bool &outside, int *hitGeomIndex);
 
