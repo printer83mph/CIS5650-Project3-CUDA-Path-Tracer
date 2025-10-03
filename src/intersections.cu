@@ -1,6 +1,7 @@
 #include "bvh.h"
 #include "intersections.h"
 #include "sceneStructs.h"
+#include <limits>
 
 __host__ __device__ float pickGeometryIntersectionTest(Geom geom, Ray r,
                                                        glm::vec3 &intersectionPoint,
@@ -159,7 +160,7 @@ __host__ __device__ float sphereIntersectionTest(
  */
 __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *geoms, Ray r,
                                                   glm::vec3 &intersectionPoint, glm::vec3 &normal,
-                                                  bool &outside) {
+                                                  bool &outside, int *hitGeomIndex) {
     const int MAX_STACK = 2048;
     int nodeStack[MAX_STACK];
 
@@ -195,6 +196,7 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
                     intersectionPoint = tempPoint;
                     normal = tempNormal;
                     outside = tempOutside;
+                    *hitGeomIndex = i;
                     hitFound = true;
                 }
             }
@@ -208,4 +210,67 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
     }
 
     return hitFound ? closestT : -1;
+}
+
+__host__ __device__ AABB getBoxBounds(Geom box) {
+    // Get the 8 corners of the unit cube
+    glm::vec3 corners[8] = {glm::vec3(-0.5f, -0.5f, -0.5f), glm::vec3(+0.5f, -0.5f, -0.5f),
+                            glm::vec3(-0.5f, +0.5f, -0.5f), glm::vec3(+0.5f, +0.5f, -0.5f),
+                            glm::vec3(-0.5f, -0.5f, +0.5f), glm::vec3(+0.5f, -0.5f, +0.5f),
+                            glm::vec3(-0.5f, +0.5f, +0.5f), glm::vec3(+0.5f, +0.5f, +0.5f)};
+
+    // Transform all corners to world space
+    AABB bounds;
+    bounds.min = glm::vec3(std::numeric_limits<float>::max());
+    bounds.max = glm::vec3(-std::numeric_limits<float>::max());
+
+    for (int i = 0; i < 8; ++i) {
+        glm::vec3 worldCorner = multiplyMV(box.transform, glm::vec4(corners[i], 1.0f));
+        bounds.min = glm::min(bounds.min, worldCorner);
+        bounds.max = glm::max(bounds.max, worldCorner);
+    }
+
+    return bounds;
+}
+
+__host__ __device__ AABB getMeshBounds(const Geom &meshGeom, const Mesh &mesh) {
+    // Get the 8 corners of the mesh bounds
+    glm::vec3 corners[8];
+    int i = 0;
+    glm::vec3 mmin = mesh.bounds.min;
+    glm::vec3 mmax = mesh.bounds.max;
+    for (int x = 0; x < 2; x += 1) {
+        int xv = (x ? mmin : mmax).x;
+        for (int y = 0; y < 2; y += 1) {
+            int yv = (y ? mmin : mmax).y;
+            for (int z = 0; z < 2; z += 1) {
+                int zv = (z ? mmin : mmax).z;
+                corners[i++] = glm::vec3(xv, yv, zv);
+            }
+        }
+    }
+
+    // Transform all corners to world space
+    AABB bounds;
+    bounds.min = glm::vec3(std::numeric_limits<float>::max());
+    bounds.max = glm::vec3(-std::numeric_limits<float>::max());
+
+    for (int i = 0; i < 8; ++i) {
+        glm::vec3 worldCorner = multiplyMV(meshGeom.transform, glm::vec4(corners[i], 1.0f));
+        bounds.min = glm::min(bounds.min, worldCorner);
+        bounds.max = glm::max(bounds.max, worldCorner);
+    }
+
+    return bounds;
+}
+
+__host__ __device__ AABB getPickGeomBounds(Geom geom, Mesh *mesh) {
+    if (geom.type == SPHERE)
+        return getBoxBounds(geom);
+    if (geom.type == CUBE)
+        return getBoxBounds(geom);
+    else if (geom.type == MESH)
+        return getMeshBounds(geom, *mesh);
+    else
+        return AABB{glm::vec3(0), glm::vec3(0)};
 }

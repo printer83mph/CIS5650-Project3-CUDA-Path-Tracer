@@ -36,7 +36,7 @@ std::unique_ptr<BuildNode<T>> groupBuildNodes(std::vector<std::unique_ptr<BuildN
         newParentNode->isLeaf = false;
         newParentNode->isOneOffFromLeaves = true;
 
-        for (std::unique_ptr<BuildNode<T>> &node : nodes) {
+        for (std::unique_ptr<BuildNode<T>> &node : *nodes) {
             newParentNode->children.push_back(std::move(node));
         }
 
@@ -140,14 +140,14 @@ template <typename T> Tree<T> createFlatTree(const BuildNode<T> &rootNode) {
 
 } // namespace
 
-template <typename T> std::vector<FlatNode> buildTree(const std::vector<Primitive<T>> &primitives) {
+template <typename T> BVH::Tree<T> buildTree(const std::vector<Primitive<T>> &primitives) {
     // Step 1: create initially flat vector of BuildNodes
     std::vector<std::unique_ptr<BuildNode<T>>> buildNodes;
 
     for (int i = 0; i < primitives.size(); ++i) {
         const Primitive<T> &primitive = primitives[i];
         buildNodes.push_back(std::make_unique<BuildNode<T>>(
-            BuildNode<T>{primitive.bounds, true, {}, static_cast<T>(i)}));
+            BuildNode<T>{primitive.bounds, true, false, {}, primitive.data}));
     }
 
     // Step 2: recursively group BuildNodes together. this will clear the `buildNodes` vector.
@@ -156,5 +156,6 @@ template <typename T> std::vector<FlatNode> buildTree(const std::vector<Primitiv
     // Step 3: flatten BuildNodes into FlatNodes
     return createFlatTree(*rootBuildNode);
 }
+template Tree<Geom> buildTree<Geom>(const std::vector<Primitive<Geom>> &);
 
 } // namespace BVH

@@ -1,7 +1,11 @@
 #include "scene.h"
 
+#include "bvh.h"
+#include "intersections.h"
+#include "sceneStructs.h"
 #include "utilities.h"
 
+#include <algorithm>
 #include <glm/detail/type_vec.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
@@ -12,7 +16,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <limits>
 #include <string>
 #include <unordered_map>
 
@@ -27,6 +30,7 @@ Scene::Scene(string filename)
     if (ext == ".json")
     {
         loadFromJSON(filename);
+        buildBVH();
         return;
     }
     else
@@ -152,6 +156,23 @@ void Scene::loadFromJSON(const std::string& jsonName)
     std::fill(state.image.begin(), state.image.end(), glm::vec3());
 }
 
+void Scene::buildBVH() {
+
+    // Fill primitives vector with geometry + bounds
+    std::vector<BVH::Primitive<Geom>> primitives;
+    for (auto &geom : this->geoms) {
+        AABB bounds =
+            getPickGeomBounds(geom, geom.type == MESH ? &this->meshes[geom.meshId] : nullptr);
+        primitives.push_back(BVH::Primitive<Geom>{bounds, geom});
+    }
+
+    BVH::Tree<Geom> tree = BVH::buildTree<Geom>(primitives);
+
+    // Copy over tree data
+    this->bvhNodes = tree.nodes;
+    this->geoms = tree.leafData;
+}
+
 void importObj(const std::string &filename, Mesh &mesh) {
     tinyobj::ObjReaderConfig reader_config;
     reader_config.triangulate = true;
@@ -174,16 +195,13 @@ void importObj(const std::string &filename, Mesh &mesh) {
     auto &attrib = reader.GetAttrib();
     auto &shapes = reader.GetShapes();
 
-    // Enable if we precompute mesh bounds - not very useful it turns out
-#if 0
     if (shapes.size() > 0) {
-        mesh.boundsMin = glm::vec3(std::numeric_limits<float>::max());
-        mesh.boundsMax = glm::vec3(std::numeric_limits<float>::min());
+        mesh.bounds.min = glm::vec3(std::numeric_limits<float>::max());
+        mesh.bounds.max = glm::vec3(std::numeric_limits<float>::min());
     } else {
-        mesh.boundsMin = glm::zero<glm::vec3>();
-        mesh.boundsMax = glm::zero<glm::vec3>();
+        mesh.bounds.min = glm::zero<glm::vec3>();
+        mesh.bounds.max = glm::zero<glm::vec3>();
     }
-#endif
 
     for (const auto &shape : shapes) {
         size_t index_offset = 0;
@@ -203,10 +221,8 @@ void importObj(const std::string &filename, Mesh &mesh) {
                     triangle.vertices[v][axis] = value;
 
                     // Enable if we precompute mesh bounds - not very useful it turns out
-#if 0
-                    mesh.boundsMax[axis] = glm::max(mesh.boundsMax[axis], value);
-                    mesh.boundsMin[axis] = glm::min(mesh.boundsMin[axis], value);
-#endif
+                    mesh.bounds.min[axis] = glm::max(mesh.bounds.min[axis], value);
+                    mesh.bounds.max[axis] = glm::min(mesh.bounds.max[axis], value);
                 }
 
                 // Check if `normal_index` is zero or positive. negative = no normal data

@@ -1,3 +1,4 @@
+#include "bvh.h"
 #include "glm/detail/type_vec.hpp"
 #include "glm/gtc/constants.hpp"
 #include "pathtrace.h"
@@ -79,6 +80,7 @@ static Scene* hst_scene = NULL;
 static GuiDataContainer* guiData = NULL;
 static glm::vec3* dev_image = NULL;
 static Geom* dev_geoms = NULL;
+static BVH::FlatNode *dev_BVHTree = NULL;
 static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
@@ -105,6 +107,13 @@ void pathtraceInit(Scene* scene)
     cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
     cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(Geom), cudaMemcpyHostToDevice);
 
+    // TODO: maybe add BVH flag
+    cudaMalloc(&dev_BVHTree, scene->bvhNodes.size() * sizeof(BVH::FlatNode));
+    cudaMemcpy(dev_BVHTree, scene->bvhNodes.data(), scene->bvhNodes.size() * sizeof(BVH::FlatNode),
+               cudaMemcpyHostToDevice);
+
+    // std::cout << "loaded " << scene->bvhNodes.size() << " bvh nodes" << std::endl;
+
     cudaMalloc(&dev_materials, scene->materials.size() * sizeof(Material));
     cudaMemcpy(dev_materials, scene->materials.data(), scene->materials.size() * sizeof(Material), cudaMemcpyHostToDevice);
 
@@ -123,6 +132,7 @@ void pathtraceFree()
     cudaFree(dev_image);  // no-op if dev_image is null
     cudaFree(dev_paths);
     cudaFree(dev_geoms);
+    cudaFree(dev_BVHTree);
     cudaFree(dev_materials);
     cudaFree(dev_intersections);
     cudaFree(dev_intersectionMaterialStartIndices);
@@ -180,14 +190,9 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
     }
 }
 
-__global__ void computeIntersections(
-    int depth,
-    int num_paths,
-    PathSegment* pathSegments,
-    Geom* geoms,
-    int geoms_size,
-    ShadeableIntersection* intersections)
-{
+__global__ void computeIntersections(int depth, int num_paths, PathSegment *pathSegments,
+                                     Geom *geoms, BVH::FlatNode *bvhTree, int geoms_size,
+                                     ShadeableIntersection *intersections) {
     int path_index = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (path_index < num_paths)
@@ -204,9 +209,11 @@ __global__ void computeIntersections(
         glm::vec3 tmp_intersect;
         glm::vec3 tmp_normal;
 
-        // naive parse through global geoms
-        // TODO: run through BVH structure with BVHIntersectionTest
+        // Run fancy BVH intersection test
+        t = BVHGeomIntersectionTest(bvhTree, geoms, pathSegment.ray, intersect_point, normal,
+                                    outside, &hit_geom_index);
 
+#if 0 // old naive parse through global geoms
         for (int i = 0; i < geoms_size; i++)
         {
             Geom& geom = geoms[i];
@@ -224,13 +231,11 @@ __global__ void computeIntersections(
                 normal = tmp_normal;
             }
         }
+#endif
 
-        if (hit_geom_index == -1)
-        {
+        if (hit_geom_index == -1) {
             intersections[path_index].t = -1.0f;
-        }
-        else
-        {
+        } else {
             // The ray hits something
             intersections[path_index].t = t_min;
             intersections[path_index].materialId = geoms[hit_geom_index].materialid;
@@ -559,14 +564,9 @@ void pathtrace(uchar4 *pbo, int frame, int iter, const PathTrace::Options &optio
 
         // tracing
         dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
-        computeIntersections<<<numblocksPathSegmentTracing, blockSize1d>>> (
-            depth,
-            num_paths,
-            dev_paths,
-            dev_geoms,
-            hst_scene->geoms.size(),
-            dev_intersections
-        );
+        computeIntersections<<<numblocksPathSegmentTracing, blockSize1d>>>(
+            depth, num_paths, dev_paths, dev_geoms, dev_BVHTree, hst_scene->geoms.size(),
+            dev_intersections);
         checkCUDAError("trace one bounce");
         cudaDeviceSynchronize();
         depth++;

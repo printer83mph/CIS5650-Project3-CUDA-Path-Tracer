@@ -28,6 +28,7 @@ struct Triangle {
 };
 
 struct Mesh {
+    AABB bounds;
     std::vector<Triangle> triangles;
 };
 
