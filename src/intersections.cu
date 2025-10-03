@@ -155,6 +155,62 @@ __host__ __device__ float sphereIntersectionTest(
     return glm::length(r.origin - intersectionPoint);
 }
 
+__host__ __device__ float triangleIntersectionTest(Triangle tri, Ray r,
+                                                   glm::vec3 &intersectionPoint, glm::vec3 &normal,
+                                                   bool &outside) {
+    // Möller-Trumbore ray-triangle intersection algorithm
+    glm::vec3 v0 = tri.vertices[0];
+    glm::vec3 v1 = tri.vertices[1];
+    glm::vec3 v2 = tri.vertices[2];
+
+    glm::vec3 edge1 = v1 - v0;
+    glm::vec3 edge2 = v2 - v0;
+
+    glm::vec3 h = glm::cross(r.direction, edge2);
+    float a = glm::dot(edge1, h);
+
+    // Check if ray is parallel to triangle
+    if (glm::abs(a) < 1e-8f) {
+        return -1;
+    }
+
+    float f = 1.0f / a;
+    glm::vec3 s = r.origin - v0;
+    float u = f * glm::dot(s, h);
+
+    // Check if intersection is outside triangle
+    if (u < 0.0f || u > 1.0f) {
+        return -1;
+    }
+
+    glm::vec3 q = glm::cross(s, edge1);
+    float v = f * glm::dot(r.direction, q);
+
+    // Check if intersection is outside triangle
+    if (v < 0.0f || u + v > 1.0f) {
+        return -1;
+    }
+
+    float t = f * glm::dot(edge2, q);
+
+    if (t > 1e-8f) {
+        intersectionPoint = getPointOnRay(r, t);
+        normal = glm::normalize(glm::cross(edge1, edge2));
+        outside = glm::dot(r.direction, normal) < 0;
+        if (!outside) {
+            normal = -normal;
+        }
+        return t;
+    }
+
+    return -1;
+}
+
+__host__ __device__ float meshIntersectionTest(const Geom &geom, const Mesh &mesh) {
+    for (auto &face : mesh.triangles) {
+    }
+}
+
 /**
  * @param nodes  BVH tree root node pointer, with remainder of nodes continuing after
  * @param geoms  Geometry array to which BVH nodes point
