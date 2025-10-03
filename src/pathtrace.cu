@@ -122,9 +122,6 @@ void pathtraceInit(Scene* scene)
     for (Mesh &mesh : scene->meshes) {
         // Insert all ye mesh data into device array
         meshes.push_back(GpuMesh{mesh.bounds, tris.size(), mesh.triangles.size()});
-        printf("added a mesh with %zu triangles, bounds: [%.2f,%.2f,%.2f] to [%.2f,%.2f,%.2f]\n",
-               mesh.triangles.size(), mesh.bounds.min.x, mesh.bounds.min.y, mesh.bounds.min.z,
-               mesh.bounds.max.x, mesh.bounds.max.y, mesh.bounds.max.z);
         // Insert all triangles into device array
         tris.reserve(tris.size() + mesh.triangles.size());
         tris.insert(tris.end(), mesh.triangles.begin(), mesh.triangles.end());
