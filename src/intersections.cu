@@ -152,3 +152,60 @@ __host__ __device__ float sphereIntersectionTest(
 
     return glm::length(r.origin - intersectionPoint);
 }
+
+/**
+ * @param nodes  BVH tree root node pointer, with remainder of nodes continuing after
+ * @param geoms  Geometry array to which BVH nodes point
+ */
+__host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *geoms, Ray r,
+                                                  glm::vec3 &intersectionPoint, glm::vec3 &normal,
+                                                  bool &outside) {
+    const int MAX_STACK = 2048;
+    int nodeStack[MAX_STACK];
+
+    int stackPtr = 0;
+    nodeStack[stackPtr++] = 0; // Start with root node
+
+    float closestT = FLT_MAX;
+    bool hitFound = false;
+
+    while (stackPtr > 0) {
+        int nodeIndex = nodeStack[--stackPtr];
+        BVH::FlatNode &node = nodes[nodeIndex];
+
+        // Test ray against node's bounding box
+        float t = AABBRayIntersectionTest(r, node.bounds);
+        if (t < 0 || t >= closestT) {
+            continue; // No intersection or farther than current closest
+        }
+
+        if (node.isLeaf) {
+            // Test against all primitives in this leaf
+            for (size_t i = node.leafInfo.dataStart;
+                 i < node.leafInfo.dataStart + node.leafInfo.dataCount; ++i) {
+                glm::vec3 tempPoint, tempNormal;
+                bool tempOutside;
+                float tempT = -1;
+                Geom &geom = geoms[i];
+
+                tempT = pickGeometryIntersectionTest(geom, r, tempPoint, tempNormal, tempOutside);
+
+                if (tempT > 0 && tempT < closestT) {
+                    closestT = tempT;
+                    intersectionPoint = tempPoint;
+                    normal = tempNormal;
+                    outside = tempOutside;
+                    hitFound = true;
+                }
+            }
+        } else {
+            // Internal node - add children to stack and continue on our merry way
+            if (stackPtr + 2 <= MAX_STACK) {
+                nodeStack[stackPtr++] = node.childOffsets[0];
+                nodeStack[stackPtr++] = node.childOffsets[1];
+            }
+        }
+    }
+
+    return hitFound ? closestT : -1;
+}
