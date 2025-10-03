@@ -210,8 +210,8 @@ __global__ void computeIntersections(int depth, int num_paths, PathSegment *path
         glm::vec3 tmp_normal;
 
         // Run fancy BVH intersection test
-        t = BVHGeomIntersectionTest(bvhTree, geoms, pathSegment.ray, intersect_point, normal,
-                                    outside, &hit_geom_index);
+        t_min = BVHGeomIntersectionTest(bvhTree, geoms, pathSegment.ray, intersect_point, normal,
+                                        outside, &hit_geom_index);
 
 #if 0 // old naive parse through global geoms
         for (int i = 0; i < geoms_size; i++)
@@ -251,62 +251,6 @@ __device__ inline float cosineHemispherePdf(float cosTheta) {
 __global__ void shadeIdealDiffuseMaterial(int iter, int num_paths,
                                           ShadeableIntersection *shadeableIntersections,
                                           PathSegment *pathSegments, Material *materials) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx > num_paths)
-        return;
-
-    ShadeableIntersection intersection = shadeableIntersections[idx];
-    if (intersection.t > 0.0f) // if the intersection exists...
-    {
-        // Set up the RNG
-        thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
-        thrust::uniform_real_distribution<float> u01(0, 1);
-
-        Material material = materials[intersection.materialId];
-        glm::vec3 materialColor = material.color;
-
-        if (material.emittance > 0.0f) {
-            // If the material indicates that the object was a light, "light" the ray
-            pathSegments[idx].color *= (materialColor * material.emittance);
-            pathSegments[idx].remainingBounces = 0;
-        } else {
-            // If our ray hit something, it should bounce off!
-            PathSegment &segment = pathSegments[idx];
-
-            // Check if this is the last bounce
-            // TODO: there must be a better way of going about this with less divergence
-            if (segment.remainingBounces <= 1) {
-                // we failed, men: no contribution
-                segment.color = glm::vec3(0.0f);
-                segment.remainingBounces = 0;
-            } else {
-                // Apply color from material etc
-                glm::vec3 brdf = materialColor * glm::one_over_pi<float>();
-                segment.color *= brdf * glm::pi<float>();
-
-                // Set up new ray babey
-                scatterRay(segment,
-                           segment.ray.origin + segment.ray.direction * (intersection.t - 0.001f),
-                           intersection.surfaceNormal, material, rng);
-
-                segment.remainingBounces--;
-            }
-        }
-    } else {
-        // We have reached the uncaring void
-
-        // If there was no intersection, color the ray black.
-        // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
-        // used for opacity, in which case they can indicate "no opacity".
-        // This can be useful for post-processing and image compositing.
-        pathSegments[idx].color = glm::vec3(0.0f);
-        pathSegments[idx].remainingBounces = 0;
-    }
-}
-
-__global__ void shadeDielectricRoughMaterial(int iter, int num_paths,
-                                             ShadeableIntersection *shadeableIntersections,
-                                             PathSegment *pathSegments, Material *materials) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx > num_paths)
         return;
