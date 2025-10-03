@@ -28,7 +28,7 @@ __host__ __device__ float AABBRayIntersectionTest(Ray ray, AABB aabb) {
     float tmin = glm::max(glm::max(glm::min(t1, t2), glm::min(t3, t4)), glm::min(t5, t6));
     float tmax = glm::min(glm::min(glm::max(t1, t2), glm::max(t3, t4)), glm::max(t5, t6));
 
-    // if tmax < 0, ray (line) is intersecting AABB, but whole AABB is behing us
+    // if tmax < 0, ray (line) is intersecting AABB, but whole AABB is behind us
     if (tmax < 0)
         return -1;
 
@@ -36,8 +36,9 @@ __host__ __device__ float AABBRayIntersectionTest(Ray ray, AABB aabb) {
     if (tmin > tmax)
         return -1;
 
+    // If tmin < 0, we're inside the box - return 0 so we still traverse/test it
     if (tmin < 0.f)
-        return tmax;
+        return 0.f;
 
     return tmin;
 }
@@ -167,7 +168,7 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
     int stackPtr = 0;
     nodeStack[stackPtr++] = 0; // Start with root node
 
-    float closestT = FLT_MAX;
+    float closestT = std::numeric_limits<float>::max();
     bool hitFound = false;
 
     while (stackPtr > 0) {
@@ -186,10 +187,10 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
                  i < node.leafInfo.dataStart + node.leafInfo.dataCount; ++i) {
                 glm::vec3 tempPoint, tempNormal;
                 bool tempOutside;
-                float tempT = -1;
                 Geom &geom = geoms[i];
 
-                tempT = pickGeometryIntersectionTest(geom, r, tempPoint, tempNormal, tempOutside);
+                float tempT =
+                    pickGeometryIntersectionTest(geom, r, tempPoint, tempNormal, tempOutside);
 
                 if (tempT > 0 && tempT < closestT) {
                     closestT = tempT;
@@ -211,7 +212,6 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
 
     return hitFound ? closestT : -1;
 }
-
 __host__ __device__ AABB getBoxBounds(Geom box) {
     // Get the 8 corners of the unit cube
     glm::vec3 corners[8] = {glm::vec3(-0.5f, -0.5f, -0.5f), glm::vec3(+0.5f, -0.5f, -0.5f),
@@ -261,6 +261,9 @@ __host__ __device__ AABB getMeshBounds(const Geom &meshGeom, const Mesh &mesh) {
         bounds.max = glm::max(bounds.max, worldCorner);
     }
 
+    // printf("Mesh bounds: min(%.3f, %.3f, %.3f) max(%.3f, %.3f, %.3f)\n", bounds.min.x,
+    // bounds.min.y,
+    //        bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z);
     return bounds;
 }
 

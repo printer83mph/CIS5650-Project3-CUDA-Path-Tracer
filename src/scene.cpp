@@ -220,9 +220,9 @@ void importObj(const std::string &filename, Mesh &mesh) {
 
                     triangle.vertices[v][axis] = value;
 
-                    // Enable if we precompute mesh bounds - not very useful it turns out
-                    mesh.bounds.min[axis] = glm::max(mesh.bounds.min[axis], value);
-                    mesh.bounds.max[axis] = glm::min(mesh.bounds.max[axis], value);
+                    // Enable if we precompute mesh bounds
+                    mesh.bounds.min[axis] = glm::min(mesh.bounds.min[axis], value);
+                    mesh.bounds.max[axis] = glm::max(mesh.bounds.max[axis], value);
                 }
 
                 // Check if `normal_index` is zero or positive. negative = no normal data

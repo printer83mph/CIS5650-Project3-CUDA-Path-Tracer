@@ -337,10 +337,13 @@ __global__ void shadeAmbientOcclusionPass(int iter, int num_paths,
             segment.color *= brdf * glm::pi<float>();
 
             // Set up new ray babey
+            glm::vec3 intersectionPoint =
+                segment.ray.origin + segment.ray.direction * intersection.t;
+            glm::vec3 offsetPoint = intersectionPoint + intersection.surfaceNormal * 0.01f;
+
             scatterRay(segment,
                        segment.ray.origin + segment.ray.direction * (intersection.t - 0.001f),
                        intersection.surfaceNormal, material, rng);
-
             segment.remainingBounces--;
         }
 
