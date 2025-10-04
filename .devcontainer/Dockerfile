@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Update system
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -y \
-  software-properties-common build-essential wget curl
+  software-properties-common build-essential wget curl sudo
 
 RUN add-apt-repository ppa:git-core/ppa && apt-get update
 
@@ -22,3 +22,7 @@ RUN update-alternatives --install /usr/bin/clangd clangd /usr/bin/clangd-20 100
 RUN apt-get autoremove -y && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
+
+# Enable passwordless sudo
+RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
+  && chmod 0440 /etc/sudoers.d/ubuntu

@@ -30,12 +30,7 @@
   },
   "postCreateCommand": "bash ./.devcontainer/setup-build.sh",
 	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {
-	// 	"ghcr.io/devcontainers/features/nvidia-cuda": {
-	// 		"cudaVersion": "13.0",
-	// 		"installToolkit": true
-	// 	}
-	// },
+	// "features": {},
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
@@ -49,8 +44,8 @@
 				"llvm-vs-code-extensions.vscode-clangd"
 			]
 		}
-	}
+	},
 
-	// "containerUser": "root",
-	// "remoteUser": "root"
+	"containerUser": "ubuntu",
+	"remoteUser": "ubuntu"
 }
