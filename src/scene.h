@@ -9,6 +9,8 @@ class Scene
 private:
   void loadFromJSON(const std::string &jsonName);
   void buildBVH();
+  void loadTrisAsPrimitives(const Geom &geom, const Mesh &mesh,
+                            std::vector<BVH::Primitive<Geom>> *primitives);
 
 public:
   Scene(std::string filename);

@@ -160,9 +160,25 @@ void Scene::buildBVH() {
 
     // Fill primitives vector with geometry + bounds
     std::vector<BVH::Primitive<Geom>> primitives;
+    std::printf("building primitives from scene\n");
     for (auto &geom : this->geoms) {
+
+#define ENABLE_TRI_NODES true
+#if ENABLE_TRI_NODES
+        if (geom.type == MESH) {
+            std::printf("building mesh as triangle primitives\n");
+            loadTrisAsPrimitives(geom, this->meshes[geom.meshId], &primitives);
+            continue;
+        }
+#endif
+
         AABB bounds =
             getPickGeomBounds(geom, geom.type == MESH ? &this->meshes[geom.meshId] : nullptr);
+        std::printf("building normal geometry with bounds min: (%.2f, %.2f, %.2f) max: (%.2f, "
+                    "%.2f, %.2f)\n",
+                    bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y,
+                    bounds.max.z);
+
         primitives.push_back(BVH::Primitive<Geom>{bounds, geom});
     }
 
@@ -171,6 +187,43 @@ void Scene::buildBVH() {
     // Copy over tree data
     this->bvhNodes = tree.nodes;
     this->geoms = tree.leafData;
+}
+
+// Instead of making "mesh" nodes, we just make a shitton of "triangle" nodes
+void Scene::loadTrisAsPrimitives(const Geom &geom, const Mesh &mesh,
+                                 std::vector<BVH::Primitive<Geom>> *primitives) {
+
+    primitives->reserve(primitives->size() + mesh.triangles.size());
+    for (int i = 0; i < mesh.triangles.size(); ++i) {
+
+        // if (i > 40)
+        //     break;
+
+        const Triangle &tri = mesh.triangles[i];
+
+        Geom triGeom = Geom{};
+        triGeom.type = TRIANGLE;
+        triGeom.materialid = geom.materialid;
+        triGeom.transform = glm::mat4(1.f);
+        triGeom.invTranspose = glm::mat4(1.f);
+        triGeom.inverseTransform = glm::mat4(1.f);
+
+        // TODO: remove
+        // triGeom.triData = tri;
+
+        AABB bounds = AABB{glm::vec3(FLT_MAX), glm::vec3(FLT_MIN)};
+        for (int vertIndex = 0; vertIndex < 3; ++vertIndex) {
+            triGeom.triData.vertices[vertIndex] =
+                multiplyMV(geom.transform, glm::vec4(tri.vertices[vertIndex], 1.f));
+            triGeom.triData.normals[vertIndex] =
+                multiplyMV(geom.invTranspose, glm::vec4(tri.normals[vertIndex], 0.f));
+
+            bounds.min = glm::min(bounds.min, triGeom.triData.vertices[vertIndex]);
+            bounds.max = glm::max(bounds.max, triGeom.triData.vertices[vertIndex]);
+        }
+
+        primitives->emplace_back(BVH::Primitive<Geom>{bounds, triGeom});
+    }
 }
 
 void importObj(const std::string &filename, Mesh &mesh) {
@@ -229,17 +282,9 @@ void importObj(const std::string &filename, Mesh &mesh) {
                 if (idx.normal_index >= 0) {
                     for (int axis = 0; axis < 3; ++axis)
                         triangle.normals[v][axis] =
-                            attrib.normals[3 * size_t(idx.vertex_index) + axis];
+                            attrib.normals[3 * size_t(idx.normal_index) + axis];
                 }
             }
-            // std::cout << "triangle created with vertices:" << std::endl
-            //           << triangle.vertices[0].x << ", " << triangle.vertices[0].y << ", "
-            //           << triangle.vertices[0].z << std::endl
-            //           << triangle.vertices[1].x << ", " << triangle.vertices[1].y << ", "
-            //           << triangle.vertices[1].z << std::endl
-            //           << triangle.vertices[2].x << ", " << triangle.vertices[2].y << ", "
-            //           << triangle.vertices[2].z << std::endl
-            //           << std::endl;
 
             index_offset += fv;
         }
