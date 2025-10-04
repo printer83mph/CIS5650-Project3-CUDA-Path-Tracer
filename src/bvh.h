@@ -6,8 +6,6 @@
 
 #include <vector>
 
-#define MAX_PRIMITIVES_PER_NODE 4
-
 namespace BVH {
 
 // Input for tree building

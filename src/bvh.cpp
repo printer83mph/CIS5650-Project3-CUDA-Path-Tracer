@@ -1,7 +1,10 @@
 #include "bvh.h"
 
-#include <limits>
+#include <algorithm>
+#include <cstdio>
 #include <memory>
+
+#define MAX_PRIMITIVES_PER_NODE 4
 
 namespace BVH {
 
@@ -24,7 +27,7 @@ std::unique_ptr<BuildNode<T>> groupBuildNodes(std::vector<std::unique_ptr<BuildN
     std::unique_ptr<BuildNode<T>> newParentNode = std::make_unique<BuildNode<T>>();
 
     // compute bounds of all contained primitives
-    newParentNode->bounds = (*nodes)[0]->bounds; // initialize dummy bounds
+    newParentNode->bounds = (*nodes)[0]->bounds; // initialize with first node bounds
     for (size_t i = 1; i < nodes->size(); ++i) {
         auto &node = (*nodes)[i];
         newParentNode->bounds.min = glm::min(newParentNode->bounds.min, node->bounds.min);
@@ -58,7 +61,7 @@ std::unique_ptr<BuildNode<T>> groupBuildNodes(std::vector<std::unique_ptr<BuildN
         }
     }
 
-    if (largestAxisSize < std::numeric_limits<float>::epsilon()) {
+    if (largestAxisSize < FLT_MIN) {
         // Fallback if everything is in the same place and we risk infinite recursion:
         // split roughly in half
         size_t mid = nodes->size() / 2;
@@ -70,7 +73,10 @@ std::unique_ptr<BuildNode<T>> groupBuildNodes(std::vector<std::unique_ptr<BuildN
         }
         nodes->clear();
     } else {
-        // Normal behavior: split by midpoint of full bounds
+
+#define SPLIT_AT_MEDIAN_INSTEAD_OF_CENTROID 0
+#if !SPLIT_AT_MEDIAN_INSTEAD_OF_CENTROID
+        // Normal behavior: split by midpoint of full bounds (centroid)
         float splitValue =
             (newParentNode->bounds.min[largestAxis] + newParentNode->bounds.max[largestAxis]) * 0.5;
 
@@ -84,6 +90,49 @@ std::unique_ptr<BuildNode<T>> groupBuildNodes(std::vector<std::unique_ptr<BuildN
                 rightChildren.push_back(std::move(node));
         }
         nodes->clear();
+
+#endif
+#if SPLIT_AT_MEDIAN_INSTEAD_OF_CENTROID
+        // Sort nodes by centroid along the largest axis
+        std::sort(nodes->begin(), nodes->end(), [largestAxis](const auto &a, const auto &b) {
+            glm::vec3 centroidA = (a->bounds.min + a->bounds.max) * 0.5f;
+            glm::vec3 centroidB = (b->bounds.min + b->bounds.max) * 0.5f;
+            return centroidA[largestAxis] < centroidB[largestAxis];
+        });
+
+        // Split at median
+        size_t mid = nodes->size() / 2;
+        for (size_t i = 0; i < mid; ++i) {
+            leftChildren.push_back(std::move((*nodes)[i]));
+        }
+        for (size_t i = mid; i < nodes->size(); ++i) {
+            rightChildren.push_back(std::move((*nodes)[i]));
+        }
+        nodes->clear();
+#endif
+
+        // Fallback: if split failed to partition, force a split
+        if (leftChildren.empty() || rightChildren.empty()) {
+            printf("got race case!\n");
+            std::vector<std::unique_ptr<BuildNode<T>>> tempVec;
+            if (leftChildren.empty()) {
+                tempVec = std::move(rightChildren);
+            } else {
+                tempVec = std::move(leftChildren);
+            }
+            size_t mid = tempVec.size() / 2;
+            leftChildren.clear();
+            rightChildren.clear();
+
+            for (size_t i = 0; i < mid; ++i) {
+                leftChildren.push_back(std::move(tempVec[i]));
+            }
+            for (size_t i = mid; i < tempVec.size(); ++i) {
+                rightChildren.push_back(std::move(tempVec[i]));
+            }
+        } else {
+            printf("no race case!\n");
+        }
     }
 
     newParentNode->isLeaf = false;
@@ -94,47 +143,71 @@ std::unique_ptr<BuildNode<T>> groupBuildNodes(std::vector<std::unique_ptr<BuildN
     return newParentNode;
 };
 
+template <typename T> void getFlatTotalNodeCount(const BuildNode<T> &node, int *countPtr) {
+    *countPtr += 1;
+
+    if (node.isLeaf || node.isOneOffFromLeaves) {
+        return;
+    }
+
+    for (const auto &child : node.children) {
+        getFlatTotalNodeCount(*child, countPtr);
+    }
+}
+
 template <typename T> Tree<T> createFlatTree(const BuildNode<T> &rootNode) {
+    std::printf("flattening tree...\n");
     Tree<T> flatTree;
+
     std::vector<const BuildNode<T> *> nodeStack;
     nodeStack.push_back(&rootNode);
 
-    // We basically run DFS and do some extra funky logic to track data indices
     while (!nodeStack.empty()) {
-        const BuildNode<T> *currentNode = nodeStack.back();
+        const BuildNode<T> *node = nodeStack.back();
         nodeStack.pop_back();
 
-        FlatNode flatNode;
-        flatNode.bounds = currentNode->bounds;
-        flatNode.isLeaf = currentNode->isLeaf;
+        FlatNode flatNode = FlatNode();
+        flatNode.bounds = node->bounds;
 
-        if (currentNode->isLeaf) {
-            // Leaf node: store data info (this should basically never happen, but just in case)
-            flatNode.leafInfo.dataStart = flatTree.leafData.size();
-            flatNode.leafInfo.dataCount = 1;
-            flatTree.leafData.push_back(currentNode->data);
-        } else if (currentNode->isOneOffFromLeaves) {
-            // One off from leaves: we store all "children" in a single leaf node
+        // Super base case (rare): we somehow got to a leaf node
+        if (node->isLeaf) {
             flatNode.isLeaf = true;
             flatNode.leafInfo.dataStart = flatTree.leafData.size();
-            flatNode.leafInfo.dataCount = currentNode->children.size();
+            flatNode.leafInfo.dataCount = 1;
 
-            for (const auto &child : currentNode->children) {
+            flatTree.leafData.push_back(node->data);
+        }
+        // Base case: we're one off from leaves
+        else if (node->isOneOffFromLeaves) {
+            flatNode.isLeaf = true;
+            flatNode.leafInfo.dataStart = flatTree.leafData.size();
+            flatNode.leafInfo.dataCount = node->children.size();
+
+            for (auto &child : node->children) {
                 flatTree.leafData.push_back(child->data);
             }
-        } else {
-            // Branch node: store ye olde child offsets
-            flatNode.childOffsets[0] = flatTree.nodes.size() + nodeStack.size() + 1;
-            flatNode.childOffsets[1] = flatTree.nodes.size() + nodeStack.size() + 2;
+        }
+        // Recursive case: we gotta add children
+        else {
+            flatNode.isLeaf = false;
+            flatNode.childOffsets[0] = flatTree.nodes.size() + 1;
 
-            // Add children to stack in funky reverse order so left runs first
-            nodeStack.push_back(currentNode->children[1].get());
-            nodeStack.push_back(currentNode->children[0].get());
+            // Right child will be at current position + 1 + total nodes in left subtree
+            int leftNodeCount = 0;
+            getFlatTotalNodeCount(*node->children[0], &leftNodeCount);
+            flatNode.childOffsets[1] = flatTree.nodes.size() + 1 + leftNodeCount;
+
+            // Push children in reverse order since stack is LIFO
+            // This ensures left child is processed first
+            for (int i = node->children.size() - 1; i >= 0; --i) {
+                nodeStack.push_back(node->children[i].get());
+            }
         }
 
         flatTree.nodes.push_back(flatNode);
     }
 
+    std::printf("tree flattened!\n");
     return flatTree;
 }
 
@@ -144,6 +217,7 @@ template <typename T> BVH::Tree<T> buildTree(const std::vector<Primitive<T>> &pr
     // Step 1: create initially flat vector of BuildNodes
     std::vector<std::unique_ptr<BuildNode<T>>> buildNodes;
 
+    std::printf("building bvh tree with %d nodes\n", (int)primitives.size());
     for (int i = 0; i < primitives.size(); ++i) {
         const Primitive<T> &primitive = primitives[i];
         buildNodes.push_back(std::make_unique<BuildNode<T>>(
