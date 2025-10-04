@@ -1,0 +1,56 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/cpp
+{
+	"name": "CUDA C++",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": ".."
+	},
+	"runArgs": [
+    "--gpus=all",
+    "--runtime=nvidia",
+    "--privileged",
+    "--network=host",
+    "--cap-add=SYS_PTRACE",
+    "--security-opt=seccomp=unconfined",
+    "--device=/dev/dri:/dev/dri"
+	],
+	"containerEnv": {
+    "DISPLAY": ":0",
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "all"
+  },
+	"hostRequirements": {
+			"gpu": "optional" 
+	},
+	"remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/usr/local/cuda/bin",
+    "LD_LIBRARY_PATH": "$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64",
+    "XLA_FLAGS": "--xla_gpu_cuda_data_dir=/usr/local/cuda"
+  },
+  "postCreateCommand": "bash ./.devcontainer/setup-build.sh",
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	// "features": {
+	// 	"ghcr.io/devcontainers/features/nvidia-cuda": {
+	// 		"cudaVersion": "13.0",
+	// 		"installToolkit": true
+	// 	}
+	// },
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Configure tool-specific properties.
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"nvidia.nsight-vscode-edition",
+				"ms-vscode.cpptools",
+				"llvm-vs-code-extensions.vscode-clangd"
+			]
+		}
+	}
+
+	// "containerUser": "root",
+	// "remoteUser": "root"
+}
