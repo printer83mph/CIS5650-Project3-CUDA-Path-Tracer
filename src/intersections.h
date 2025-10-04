@@ -103,4 +103,4 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
                                                   bool &outside, int *hitGeomIndex);
 
 // Bounds generation
-__host__ __device__ AABB getPickGeomBounds(Geom geom, Mesh *mesh);
+AABB getPickGeomBounds(Geom geom, Mesh *mesh);

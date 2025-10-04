@@ -1,6 +1,7 @@
 #include "bvh.h"
 #include "intersections.h"
 #include "sceneStructs.h"
+#include <cstdio>
 
 __host__ __device__ float pickGeometryIntersectionTest(Geom geom, Triangle *meshTriangles,
                                                        GpuMesh *meshes, Ray r,
@@ -10,6 +11,8 @@ __host__ __device__ float pickGeometryIntersectionTest(Geom geom, Triangle *mesh
         return boxIntersectionTest(geom, r, intersectionPoint, normal, outside);
     } else if (geom.type == SPHERE) {
         return sphereIntersectionTest(geom, r, intersectionPoint, normal, outside);
+    } else if (geom.type == TRIANGLE) {
+        return triangleIntersectionTest(geom.triData, r, intersectionPoint, normal, outside);
     } else if (geom.type == MESH) {
         // Naive implementation: iterate through triangles, run tri intersection on each
         const GpuMesh &mesh = meshes[geom.meshId];
@@ -44,7 +47,7 @@ __host__ __device__ float AABBRayIntersectionTest(Ray ray, AABB aabb) {
 
     // If tmin < 0, we're inside the box - return 0 so we still traverse/test it
     if (tmin < 0.f)
-        return 0.f;
+        return FLT_MIN;
 
     return tmin;
 }
@@ -165,9 +168,9 @@ __host__ __device__ float triangleIntersectionTest(Triangle tri, Ray r,
                                                    glm::vec3 &intersectionPoint, glm::vec3 &normal,
                                                    bool &outside) {
     // Moller-Trumbore ray-triangle intersection algorithm
-    glm::vec3 v0 = tri.vertices[0];
-    glm::vec3 v1 = tri.vertices[1];
-    glm::vec3 v2 = tri.vertices[2];
+    glm::vec3 v0 = tri.vertices[0], v1 = tri.vertices[1], v2 = tri.vertices[2];
+
+    // TODO: return blended normal
 
     glm::vec3 edge1 = v1 - v0;
     glm::vec3 edge2 = v2 - v0;
@@ -302,6 +305,7 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
         } else {
             // Internal node - add children to stack and continue on our merry way
             if (stackPtr + 2 <= MAX_STACK) {
+                // Add farther child first (will be processed later)
                 nodeStack[stackPtr++] = node.childOffsets[0];
                 nodeStack[stackPtr++] = node.childOffsets[1];
             }
@@ -310,7 +314,8 @@ __host__ __device__ float BVHGeomIntersectionTest(BVH::FlatNode *nodes, Geom *ge
 
     return hitFound ? closestT : -1;
 }
-__host__ __device__ AABB getBoxBounds(Geom box) {
+
+AABB getBoxBounds(Geom box) {
     // Get the 8 corners of the unit cube
     glm::vec3 corners[8] = {glm::vec3(-0.5f, -0.5f, -0.5f), glm::vec3(+0.5f, -0.5f, -0.5f),
                             glm::vec3(-0.5f, +0.5f, -0.5f), glm::vec3(+0.5f, +0.5f, -0.5f),
@@ -331,32 +336,30 @@ __host__ __device__ AABB getBoxBounds(Geom box) {
     return bounds;
 }
 
-__host__ __device__ AABB getMeshBounds(const Geom &meshGeom, const Mesh &mesh) {
+AABB getMeshBounds(const Geom &meshGeom, const Mesh &mesh) {
+
+    AABB bounds;
+    bounds.min = glm::vec3(FLT_MAX);
+    bounds.max = glm::vec3(-FLT_MAX);
+
     // Get the 8 corners of the mesh bounds
     glm::vec3 corners[8];
     int i = 0;
     glm::vec3 mmin = mesh.bounds.min;
     glm::vec3 mmax = mesh.bounds.max;
-    for (int x = 0; x < 2; x += 1) {
-        int xv = (x ? mmin : mmax).x;
-        for (int y = 0; y < 2; y += 1) {
-            int yv = (y ? mmin : mmax).y;
-            for (int z = 0; z < 2; z += 1) {
-                int zv = (z ? mmin : mmax).z;
-                corners[i++] = glm::vec3(xv, yv, zv);
+    for (int x = 0; x < 2; x++) {
+        float xv = (x == 0 ? mmin : mmax).x;
+        for (int y = 0; y < 2; y++) {
+            float yv = (y == 0 ? mmin : mmax).y;
+            for (int z = 0; z < 2; z++) {
+                float zv = (z == 0 ? mmin : mmax).z;
+
+                glm::vec3 corner = glm::vec3(xv, yv, zv);
+                glm::vec3 worldCorner = multiplyMV(meshGeom.transform, glm::vec4(corner, 1.0f));
+                bounds.min = glm::min(bounds.min, worldCorner);
+                bounds.max = glm::max(bounds.max, worldCorner);
             }
         }
-    }
-
-    // Transform all corners to world space
-    AABB bounds;
-    bounds.min = glm::vec3(FLT_MAX);
-    bounds.max = glm::vec3(-FLT_MAX);
-
-    for (int i = 0; i < 8; ++i) {
-        glm::vec3 worldCorner = multiplyMV(meshGeom.transform, glm::vec4(corners[i], 1.0f));
-        bounds.min = glm::min(bounds.min, worldCorner);
-        bounds.max = glm::max(bounds.max, worldCorner);
     }
 
     // printf("Mesh bounds: min(%.3f, %.3f, %.3f) max(%.3f, %.3f, %.3f)\n", bounds.min.x,
@@ -365,7 +368,7 @@ __host__ __device__ AABB getMeshBounds(const Geom &meshGeom, const Mesh &mesh) {
     return bounds;
 }
 
-__host__ __device__ AABB getPickGeomBounds(Geom geom, Mesh *mesh) {
+AABB getPickGeomBounds(Geom geom, Mesh *mesh) {
     if (geom.type == SPHERE)
         return getBoxBounds(geom);
     if (geom.type == CUBE)
