@@ -2,7 +2,7 @@
 
 TODO: cover image
 
-**University of Pennsylvania, CIS 565: GPU Programming and Architecture, Project 3**
+**University of Pennsylvania, CIS 5650: GPU Programming and Architecture, Project 3**
 
 * Thomas Shaw
   * [LinkedIn](https://www.linkedin.com/in/thomas-shaw-54468b222), [personal website](https://tlshaw.me), [GitHub](https://github.com/printer83mph), etc.
@@ -12,7 +12,7 @@ TODO: cover image
 
 ### Arbitrary mesh loading
 
-We use tinyobj to load arbitrary meshes from files. These are passed into the GPU as a device array of `Triangle`s, with indices and sizes passed in through the `GpuMesh` array.
+We use [tinyobjloader](https://github.com/tinyobjloader/tinyobjloader) to load arbitrary meshes from files. These are passed into the GPU as a device array of `Triangle`s, with indices and sizes passed in through the `GpuMesh` array.
 
 **TODO: a nice mesh image**
 
@@ -52,6 +52,8 @@ Although a post-processing pipeline has not yet been implemented to support thes
 To allow for reproducible builds and better overall DX, I've added configuration files to support [devcontainers](https://containers.dev/). 
 
 Although this will still require an NVIDIA GPU and some configuration, specifically the NVIDIA container runtime, it can reduce the bloat of installing one-time tooling for projects that you might later forget to remove.
+
+It also comes with a clangd language server installed by default, and the VSCode extension along with it.
 
 
 ## Usage

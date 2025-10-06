@@ -1,4 +1,7 @@
 {
+  // Disable C/C++ built-in intellisense in favor of clangd
+  "C_Cpp.intelliSenseEngine": "disabled",
+
   "files.associations": {
     "*.cu": "cuda-cpp"
   },
