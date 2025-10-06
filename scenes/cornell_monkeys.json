@@ -33,13 +33,13 @@
     {
         "RES":[800,800],
         "FOVY":45.0,
-        "ITERATIONS":5000,
+        "ITERATIONS":3000,
         "DEPTH":8,
-        "FILE":"cornell",
+        "FILE":"cornell_monkeys",
         "EYE":[0.0,5.0,10.5],
         "LOOKAT":[0.0,5.0,0.0],
         "UP":[0.0,1.0,0.0],
-        "FOCAL_DISTANCE": 11.5,
+        "FOCAL_DISTANCE": 8.8,
         "APERTURE_RADIUS": 0.1
     },
     "Objects":
@@ -90,7 +90,7 @@
             "TYPE":"mesh",
             "MESH": "monkey",
             "MATERIAL":"diffuse_white",
-            "TRANS":[0.0,4.0,0.0],
+            "TRANS":[0.0,4.0,-0.5],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[4, 4, 4]
         },
