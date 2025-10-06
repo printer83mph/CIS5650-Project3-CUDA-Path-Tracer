@@ -14,7 +14,7 @@ TODO: cover image
 
 We use [tinyobjloader](https://github.com/tinyobjloader/tinyobjloader) to load arbitrary meshes from files. These are passed into the GPU as a device array of `Triangle`s, with indices and sizes passed in through the `GpuMesh` array.
 
-**TODO: a nice mesh image**
+![](img/gruh.diffuse.png)
 
 ### Adjustable camera depth of field (DOF)
 
@@ -94,7 +94,10 @@ Once successfully built, use the run/debug configurations as seen in the devcont
 
 ### Configuration
 
-TODO
+Camera properties, scene layout, and file output can be adjusted in each `scene.json` file in `scenes`.
+
+To disable optimizations like mesh-level BVH generation, find line 166 in `src/scene.cpp`, and change `#define ENABLE_TRI_NODES true` to `false`.
+
 
 ## Third-Party Libraries
 
@@ -103,4 +106,6 @@ TODO
 
 ## Bloopers
 
-TODO
+Silly BVH business:
+
+![](img/blooper_01.png)
