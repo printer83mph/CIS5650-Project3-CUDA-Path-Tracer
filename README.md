@@ -57,6 +57,14 @@ Although this will still require an NVIDIA GPU and some configuration, specifica
 
 It also comes with a clangd language server installed by default, and the VSCode extension along with it.
 
+## Performance Analysis + Notes
+
+When implementing depth of field, the performance hit was negligible. However, because our camera rays get more scattered, we need more samples to get to a clean final image.
+
+OBJ loading instantly hit performance. The table in the BVH feature section shows the huge sample time when naively iterating through mesh triangles.
+
+Once a BVH implementation was added, and mesh triangles were separated into individual primitives, performance could scale much more effectively. Passing these to the GPU is a bit of a nightmare, since hierarchical data structures and heap-allocated data isn't super possible. Instead, primitive trees had to be flattened. In order to reduce tree size, my implementation also allows for more than 1 primitive per leaf node, and it seems around 4 is the sweet spot.
+
 
 ## Usage
 
