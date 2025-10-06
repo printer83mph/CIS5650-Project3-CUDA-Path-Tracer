@@ -39,7 +39,7 @@
     {
         "RES":[1280,1280],
         "FOVY":13,
-        "ITERATIONS":1500,
+        "ITERATIONS":3000,
         "DEPTH":8,
         "FILE":"showoff_bunny",
         "EYE":[4.0,-7.0,23],
