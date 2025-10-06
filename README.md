@@ -1,6 +1,6 @@
 # CUDA Path Tracer
 
-TODO: cover image
+![](img/showoff_bunny.diffuse.png)
 
 **University of Pennsylvania, CIS 5650: GPU Programming and Architecture, Project 3**
 
