@@ -16,7 +16,8 @@
       "program": "${workspaceFolder}/build/bin/Debug/cis565_path_tracer",
       "cwd": "${workspaceFolder}/build",
       "args": ["../scenes/cornell.json"],
-      "preLaunchTask": "Build Debug"
+      "preLaunchTask": "Build (Debug)",
+      "miDebuggerPath": "/usr/local/cuda/bin/cuda-gdb",
     },
     {
       "name": "CUDA C++: Launch Release",
@@ -29,7 +30,8 @@
       "program": "${workspaceFolder}/build/bin/Release/cis565_path_tracer",
       "cwd": "${workspaceFolder}/build",
       "args": ["../scenes/cornell.json"],
-      "preLaunchTask": "Build Release"
+      "preLaunchTask": "Build (Release)",
+      "miDebuggerPath": "/usr/local/cuda/bin/cuda-gdb",
     },
     {
       "name": "CUDA C++: Attach",
