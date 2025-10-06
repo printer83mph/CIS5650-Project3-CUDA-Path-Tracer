@@ -22,7 +22,9 @@ By accurately simulating a pinhole camera, camera rays can be scattered to accur
 
 | DOF off | DOF on |
 | --- | --- |
-| TODO | TODO |
+| ![](img/fairy_lights.no_dof.png) | ![](img/fairy_lights.with_dof.png) |
+
+The focal distance and aperture radius are adjustable in both the scene file and the viewport.
 
 ### Bounding Volume Hierarchy (BVH)
 
